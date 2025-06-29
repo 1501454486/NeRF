@@ -15,4 +15,26 @@ class NetworkWrapper(nn.Module):
         """
         Write your codes here.
         """
-        pass
+        gt_rgb = batch['gt_rgb']
+        output = self.renderer.render(batch)
+        coarse_rgb_map = output['coarse_rgb_map']
+        fine_rgb_map = output['fine_rgb_map']
+
+        loss_c = nn.functional.mse_loss(coarse_rgb_map, gt_rgb)
+        loss_f = nn.functional.mse_loss(fine_rgb_map, gt_rgb)
+        loss = loss_c + loss_f
+
+        loss_stats = {
+            'loss_c': loss_c,
+            'loss_f': loss_f,
+            'loss': loss
+        }
+
+        image_stats = {
+            'coarse_rgb_map': coarse_rgb_map,
+            'fine_rgb_map': fine_rgb_map,
+            'gt_rgb': gt_rgb,
+            'error_map': torch.abs(fine_rgb_map - gt_rgb)
+        }
+
+        return output, loss, loss_stats, image_stats

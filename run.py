@@ -52,7 +52,7 @@ def run_evaluate():
     from src.models.nerf.renderer import make_renderer
     from src.utils.net_utils import load_network
 
-    print(f"trainde_model_dir: {cfg.trained_model_dir}")
+    print(f"trained_model_dir: {cfg.trained_model_dir}")
     network = make_network(cfg).cuda()
     load_network(
         network, cfg.trained_model_dir, resume=cfg.resume, epoch=cfg.test.epoch

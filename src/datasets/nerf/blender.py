@@ -54,10 +54,6 @@ class Dataset(data.Dataset):
         else:
             self.frames = cam_info['frames'][cam_start:cam_end:cam_step]
 
-        # default: 2 and 6
-        self.near = kwargs.get('near', 2)
-        self.far = kwargs.get('far', 6)
-
 
     def __getitem__(self, index):
         """
@@ -77,6 +73,8 @@ class Dataset(data.Dataset):
         img_path = os.path.join(self.data_root, frame['file_path'])
         image = self.load_image(img_path)   # shape: (H, W, 3)
         H, W, _ = image.shape
+        focal = 0.5 * W / np.tan(0.5 * self.camera_angle_x)  # focal length
+        transform_matrix = np.array(frame['transform_matrix'])[:3, :3]  # shape: (3, 3)
 
         # Randomly sample 1024 rays
         if self.split == 'train':
@@ -89,30 +87,23 @@ class Dataset(data.Dataset):
             u = u.flatten() # shape: (H*W,)
             v = v.flatten() # shape: (H*W,)
 
-        # normalized camera coordinates
-        coords_uv = np.stack([u, v], axis = 1)
         rgb = image[v, u, :]
         
-        # physical image plane coordinates:
-        coords_img = np.stack([-(coords_uv[:, 0] - W / 2), coords_uv[:, 1] - H / 2], axis = 1)
+        viewdirs = np.stack([(u - W / 2) / focal, -(v - H / 2) / focal, -np.ones_like(u)], axis=-1)  # shape: (1024, 3)
+        viewdirs = (transform_matrix @ viewdirs.T).T
+        origin_xyz = transform_matrix[:3, -1]
+        origin_xyz = np.broadcast_to(origin_xyz, viewdirs.shape)
+        
+        batch = {}
+        batch['xyz'] = torch.tensor(origin_xyz)
+        batch['viewdirs'] = torch.tensor(viewdirs)
+        batch['gt_rgb'] = torch.tensor(rgb)
+        batch['id'] = index
+        batch['num_imgs'] = len(self.frames)
+        batch['H'] = H
+        batch['W'] = W
 
-        # normalized camera coordinates
-        processed_coords = coords_img / self.camera_angle_x
-        z_col = np.full((coords_img.shape[0], 1), -1, dtype=processed_coords.dtype)
-        coords_cam = np.concatenate([processed_coords, z_col], axis = 1)
-
-        # camera coordinates to world coordinates
-        # 1. turn it into homogeneous coords
-        ones_col = np.ones((coords_cam.shape[0], 1))
-        coords_cam_h = np.concatenate([coords_cam, ones_col], axis = 1) # shape: (1024, 4)
-        coords_world_h_transposed = frame['transform_matrix'] @ coords_cam_h.T  # shape: (4, 1024)
-        coords_world = coords_world_h_transposed.T[:, :3]   # shape: (1024, 3)
-
-        rotation_matrix = np.array(frame['transform_matrix'])[:3, :3]  # shape: (3, 3)
-        rays_transposed = rotation_matrix @ coords_world.T  # shape: (3, 1024)
-        rays = rays_transposed.T  # shape: (1024, 3)
-
-        return rays, rgb
+        return batch
         
 
     def __len__(self):

@@ -44,10 +44,45 @@ class Evaluator:
         """
         Write your codes here.
         """
-        pass
+        image_stats = {}
+        
+        img_pred = output['fine_rgb_map'].cpu().numpy()
+        img_pred = img_pred.reshape(batch['H'].item(), batch['W'].item(), 3)
+        img_gt = batch['gt_rgb'].cpu().numpy()
+
+        psnr = self.psnr_metric(img_pred, img_gt)
+        ssim = self.ssim_metric(img_pred, img_gt, batch, batch['id'].item(), batch['num_imgs'])
+        img = img_pred
+        
+        self.psnr.append(psnr)
+        self.ssim.append(ssim)
+        self.imgs.append(img)
+
+        return {}
 
     def summarize(self):
         """
         Write your codes here.
         """
-        pass
+        if not self.psnr:
+            print("No evaluations to summarize.")
+            return {}
+        
+        mean_psnr = np.mean(self.psnr)
+        mean_ssim = np.mean(self.ssim)
+
+        summary = {
+            "mean_psnr": mean_psnr,
+            "mean_ssim": mean_ssim,
+        }
+
+        print(f"Validation Summary: PSNR: {mean_psnr:.4f}, SSIM: {mean_ssim:.4f}")
+
+        result_path = os.path.join(cfg.result_dir, "metrics.json")
+        with open(result_path, 'w') as f:
+            json.dump(summary, f, indent=4)
+
+        self.psnr.clear()
+        self.ssim.clear()
+
+        return summary
