@@ -37,7 +37,7 @@ class Evaluator:
         )
         img_pred = (img_pred * 255).astype(np.uint8)
 
-        ssim = compare_ssim(img_pred, img_gt, win_size=101, full=True)
+        ssim, _ = compare_ssim(img_pred, img_gt, win_size=101, full=True)
         return ssim
 
     def evaluate(self, output, batch):
@@ -49,6 +49,7 @@ class Evaluator:
         img_pred = output['fine_rgb_map'].cpu().numpy()
         img_pred = img_pred.reshape(batch['H'].item(), batch['W'].item(), 3)
         img_gt = batch['gt_rgb'].cpu().numpy()
+        img_gt = img_gt.reshape(batch['H'].item(), batch['W'].item(), 3)
 
         psnr = self.psnr_metric(img_pred, img_gt)
         ssim = self.ssim_metric(img_pred, img_gt, batch, batch['id'].item(), batch['num_imgs'])
