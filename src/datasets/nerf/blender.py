@@ -74,7 +74,9 @@ class Dataset(data.Dataset):
         image = self.load_image(img_path)   # shape: (H, W, 3)
         H, W, _ = image.shape
         focal = 0.5 * W / np.tan(0.5 * self.camera_angle_x)  # focal length
-        transform_matrix = np.array(frame['transform_matrix'])[:3, :3]  # shape: (3, 3)
+        c2w_matrix = np.array(frame['transform_matrix'])  # shape: (4, 4)
+        rotation_matrix = c2w_matrix[:3, :3]  # shape: (3, 3)
+        origin_xyz = c2w_matrix[:3, -1]
 
         # Randomly sample 1024 rays
         if self.split == 'train':
@@ -90,8 +92,7 @@ class Dataset(data.Dataset):
         rgb = image[v, u, :]
         
         viewdirs = np.stack([(u - W / 2) / focal, -(v - H / 2) / focal, -np.ones_like(u)], axis=-1)  # shape: (1024, 3)
-        viewdirs = (transform_matrix @ viewdirs.T).T
-        origin_xyz = transform_matrix[:3, -1]
+        viewdirs = (rotation_matrix @ viewdirs.T).T
         origin_xyz = np.broadcast_to(origin_xyz, viewdirs.shape)
         
         batch = {}

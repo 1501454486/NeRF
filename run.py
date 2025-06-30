@@ -36,7 +36,7 @@ def run_network():
         with torch.no_grad():
             torch.cuda.synchronize()
             start = time.time()
-            output = renderer.render(batch)
+            output = renderer.render(batch, is_training=False)
             torch.cuda.synchronize()
             total_time += time.time() - start
     print(total_time / len(data_loader))
@@ -70,7 +70,7 @@ def run_evaluate():
         with torch.no_grad():
             torch.cuda.synchronize()
             start_time = time.time()
-            output = renderer.render(batch)
+            output = renderer.render(batch, is_training=False)
             torch.cuda.synchronize()
             end_time = time.time()
         net_time.append(end_time - start_time)
@@ -82,6 +82,13 @@ def run_evaluate():
     else:
         print("net_time: ", np.mean(net_time))
         print("fps: ", 1.0 / np.mean(net_time))
+
+    if cfg.write_video:
+        renderer.render_video_from_images(
+            os.path.join(cfg.result_dir, "images"),
+            fps=24,
+        )
+        print("Video saved to: ", os.path.join(cfg.result_dir, "videos"))
 
 
 if __name__ == "__main__":

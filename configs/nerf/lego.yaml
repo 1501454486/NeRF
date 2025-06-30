@@ -10,6 +10,8 @@ renderer_module: src.models.nerf.renderer.volume_renderer
 loss_module: src.train.trainers.nerf
 evaluator_module: src.evaluators.nerf
 
+write_video: True
+
 task_arg:
   N_rays: 1024 # number of rays in each batch
   chunk_size: 4096 # number of rays processed in parallel
@@ -61,7 +63,7 @@ test_dataset:
   data_root: "data/lego"
   split: "test"
   input_ratio: 0.5
-  cams: [0, -1, 100]
+  cams: [0, -1,1]
   H: 800
   W: 800
 

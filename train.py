@@ -124,10 +124,10 @@ def main():
         test(cfg, network)
     else:
         train(cfg, network)
-    # if cfg.local_rank == 0:
-    #     print("Success!")
-    #     print("=" * 80)
-    os.system("kill -9 {}".format(os.getpid()))
+    if cfg.local_rank == 0:
+        print("Success!")
+        print("=" * 80)
+    # os.system("kill -9 {}".format(os.getpid()))
 
 
 if __name__ == "__main__":

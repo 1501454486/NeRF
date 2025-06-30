@@ -27,17 +27,23 @@ class Evaluator:
     def ssim_metric(self, img_pred, img_gt, batch, id, num_imgs):
         result_dir = os.path.join(cfg.result_dir, "images")
         os.system("mkdir -p {}".format(result_dir))
+
+        ##################### FIX #################################
+        pred_to_save = (img_pred[..., [2, 1, 0]] * 255).astype(np.uint8)
+        gt_to_save = (img_gt[..., [2, 1, 0]] * 255).astype(np.uint8)
+
         cv2.imwrite(
             "{}/view{:03d}_pred.png".format(result_dir, id),
-            (img_pred[..., [2, 1, 0]] * 255),
+            pred_to_save,
         )
         cv2.imwrite(
             "{}/view{:03d}_gt.png".format(result_dir, id),
-            (img_gt[..., [2, 1, 0]] * 255),
+            gt_to_save,
         )
-        img_pred = (img_pred * 255).astype(np.uint8)
+        img_pred_uint8 = (img_pred * 255).astype(np.uint8)
+        img_gt_uint8 = (img_gt * 255).astype(np.uint8)
 
-        ssim, _ = compare_ssim(img_pred, img_gt, win_size=101, full=True)
+        ssim, _ = compare_ssim(img_pred_uint8, img_gt_uint8, win_size=101, full=True, channel_axis = -1)
         return ssim
 
     def evaluate(self, output, batch):

@@ -1,5 +1,10 @@
 import numpy as np
 import torch
+import os
+import natsort  # 用于自然排序
+import glob
+
+from moviepy.video.io.ImageSequenceClip import ImageSequenceClip
 from src.config import cfg
 
 
@@ -25,8 +30,10 @@ class Renderer:
         self.coarse_samples = None
         self.fine_samples = None
         self.t_bins = None
+        
+        self.chunk_size = cfg.task_arg.chunk_size if cfg.task_arg.chunk_size > 0 else 1024
 
-    def render(self, batch):
+    def render(self, batch, is_training: bool = True):
         """
         This function is responsible for rendering the output of the model, which includes the RGB values and the depth values.
         1. 输入是从dataloader中获得的batch, 包括光线方向rays(1024, 3)和rgb(1024, 3)
@@ -38,8 +45,8 @@ class Renderer:
 
         Write your codes here.
         """
-        coarse_rgb_map, coarse_depth_map, w_i_coarse = self.render_coarse(batch)
-        fine_rgb_map, fine_depth_map = self.render_fine(batch, w_i_coarse)
+        coarse_rgb_map, coarse_depth_map, w_i_coarse = self.render_coarse(batch, is_training)
+        fine_rgb_map, fine_depth_map = self.render_fine(batch, w_i_coarse, is_training)
 
         image = {}
         image['coarse_rgb_map'] = coarse_rgb_map
@@ -49,7 +56,7 @@ class Renderer:
 
         return image
 
-    def render_coarse(self, batch):
+    def render_coarse(self, batch, is_training: bool = True):
         """
         This function is responsible for rendering the coarse model.
 
@@ -66,7 +73,7 @@ class Renderer:
         samples = near * (1 - samples) + far * samples # shape: (1024, 64)
         self.t_bins = samples.clone()  # save the t_bins for importance sampling later
         
-        if self.perturb > 0:
+        if self.perturb > 0 and is_training:
             samples = self.add_perturbation(samples)
         self.coarse_samples = samples
 
@@ -77,17 +84,18 @@ class Renderer:
         # change the shape so that they can match
         xyz = xyz.unsqueeze(2).squeeze(0)                       # shape: (1024, 1, 3)
         viewdirs = viewdirs.squeeze(0)                          # shape: (1024, 3)
-        pts = xyz + samples.unsqueeze(-1) * viewdirs.unsqueeze(1)     # shape: (1024, 64, 3)
         # normalize viewdirs
         viewdirs = viewdirs / torch.norm(viewdirs, dim=-1, keepdim=True)
+        pts = xyz + samples.unsqueeze(-1) * viewdirs.unsqueeze(1)     # shape: (1024, 64, 3)
+
         # Render the coarse model, output_flat: (1024, 64, 4)
-        output_flat = self.net(pts, viewdirs)
+        output_flat = self.run_network(pts, viewdirs)  # use the run_network function to handle chunking
 
         density = output_flat[..., 3]   # shape: (1024, 64)
         raw_rgb = output_flat[..., :3]      # shape: (1024, 64, 3)
 
         # Add Gausssian noise to density(sigma) (only for training)
-        if self.raw_noise_std > 0:
+        if self.raw_noise_std > 0 and is_training:
             density = add_noise(density)    # shape: (1024, 64)
 
         # Apply ReLU to the density
@@ -102,13 +110,16 @@ class Renderer:
         w_i = T_i * alpha   # shape: (1024, 64)
         
         rgb_map = torch.sum(w_i.unsqueeze(-1) * rgb, dim=-2)  # shape: (1024, 3)
-
+        # add background color if white_bkgd is True
+        if self.white_bkgd > 0:
+            acc_map = torch.sum(w_i, -1)
+            rgb_map = rgb_map + (1. - acc_map.unsqueeze(-1))
         # depth value is the expected value of weight
         depth_map = torch.sum(w_i * samples, dim=-1)      # shape: (1024)
 
         return rgb_map, depth_map, w_i
         
-    def render_fine(self, batch, weights):
+    def render_fine(self, batch, weights, is_training: bool = True):
         """
         This function is responsible for rendering the fine model.
 
@@ -124,7 +135,7 @@ class Renderer:
 
         coarse_samples = self.coarse_samples
         fine_samples = self.importance_sampling(weights)  # shape: (1024, N_importance)
-        if self.perturb > 0:
+        if self.perturb > 0 and is_training:
             fine_samples = self.add_perturbation(fine_samples)
         self.fine_samples = fine_samples
 
@@ -139,17 +150,18 @@ class Renderer:
         # change the shape so that they can match
         xyz = xyz.unsqueeze(2).squeeze(0)                       # shape: (1024, 1, 3)
         viewdirs = viewdirs.squeeze(0)                          # shape: (1024, 3)
-        pts = xyz + samples.unsqueeze(-1) * viewdirs.unsqueeze(1)     # shape: (1024, 192, 3)
         # normalize viewdirs
         viewdirs = viewdirs / torch.norm(viewdirs, dim=-1, keepdim=True)
+        pts = xyz + samples.unsqueeze(-1) * viewdirs.unsqueeze(1)     # shape: (1024, 192, 3)
+
         # Render the fine model, output_flat: (1024, 192, 4)
-        output_flat = self.net(pts, viewdirs, "fine")
+        output_flat = self.run_network(pts, viewdirs, "fine")  # use the run_network function to handle chunking
 
         density = output_flat[..., 3]   # shape: (1024, 192)
         raw_rgb = output_flat[..., :3]      # shape: (1024, 192, 3)
 
         # Add Gausssian noise to density(sigma) (only for training)
-        if self.raw_noise_std > 0:
+        if self.raw_noise_std > 0 and is_training:
             density = add_noise(density)    # shape: (1024, 192)
 
         # Apply ReLU to the density
@@ -164,7 +176,10 @@ class Renderer:
         w_i = T_i * alpha   # shape: (1024, 192)
         
         rgb_map = torch.sum(w_i.unsqueeze(-1) * rgb, dim=-2)  # shape: (1024, 3)
-
+        # add background color if white_bkgd is True
+        if self.white_bkgd > 0:
+            acc_map = torch.sum(w_i, -1)
+            rgb_map = rgb_map + (1. - acc_map.unsqueeze(-1))
         # depth value is the expected value of weight
         depth_map = torch.sum(w_i * samples, dim=-1)      # shape: (1024)
 
@@ -226,3 +241,76 @@ class Renderer:
         u_samples = torch.rand(batch_size, self.N_importance, device = weights.device)
         samples = bins_lower + (bins_upper - bins_lower) * u_samples
         return samples
+
+    def run_network(self, pts, viewdirs, model_type="coarse"):
+        """
+        This function is responsible for running the network on the given points and view directions in chunk_size.
+
+        @param pts: The points to be rendered.
+        @param viewdirs: The view directions.
+        @param model_type: The type of the model, either "coarse" or "fine".
+        @return: The output of the network.
+
+        """
+        # pts: [N_rays, N_samples, 3]
+        # viewdirs: [N_rays, 3]
+        N_rays = pts.shape[0]
+        
+        all_outputs = []
+        # deal with chunk_size rays at a time
+        for i in range(0, N_rays, self.chunk_size):
+            chunk_pts = pts[i:i+self.chunk_size]        # shape: [chunk_size, N_samples, 3]
+            chunk_viewdirs = viewdirs[i:i+self.chunk_size]      # shape: [chunk_size, 3]
+
+            if model_type == "fine":
+                chunk_output = self.net(chunk_pts, chunk_viewdirs, "fine")
+            else:
+                chunk_output = self.net(chunk_pts, chunk_viewdirs)
+            
+            all_outputs.append(chunk_output)
+            
+        # merge all outputs
+        output = torch.cat(all_outputs, dim=0)
+        
+        return output
+
+    def render_video_from_images(self, image_folder: str, fps: int = 24):
+        """
+        从图片序列渲染视频。
+        此版本硬编码为仅查找 'view*_pred.png' 格式的图片。
+        """
+        print(f"开始从文件夹 '{image_folder}' 渲染视频...")
+        print("模式: 将只使用 'view*_pred.png' 格式的图片。")
+
+        output_dir = os.path.join(cfg.result_dir, "videos")
+        os.makedirs(output_dir, exist_ok=True)
+        video_path = os.path.join(output_dir, "view_pred_video.mp4")
+
+        # 1. 定义文件搜索模式
+        # '*' 是一个通配符, 它会匹配 'view' 和 '_pred.png' 之间的任何字符
+        search_pattern = os.path.join(image_folder, 'view*_pred.png')
+
+        # 2. 使用 glob 查找所有匹配模式的图片文件
+        # glob.glob 会返回一个包含完整路径的列表
+        found_files = glob.glob(search_pattern)
+
+        # 3. 使用 natsort 对找到的文件路径进行自然排序
+        # 确保 view2.png 在 view10.png 之前
+        full_image_paths = natsort.natsorted(found_files)
+        
+        if not full_image_paths:
+            print(f"错误：在文件夹 '{image_folder}' 中没有找到符合 'view*_pred.png' 模式的图片。")
+            return
+
+        print(f"找到了 {len(full_image_paths)} 张匹配的图片进行渲染。")
+
+        # 4. 使用 MoviePy 基于处理后的完整路径列表创建剪辑
+        clip = ImageSequenceClip(full_image_paths, fps=fps)
+
+        # 5. 写入视频文件
+        print(f"正在将视频写入到 '{video_path}'...")
+        try:
+            clip.write_videofile(video_path, codec='libx264', logger='bar')
+            print(f"视频渲染成功！已保存在: {video_path}")
+        except Exception as e:
+            print(f"视频渲染失败: {e}")
