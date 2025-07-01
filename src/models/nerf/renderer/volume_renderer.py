@@ -1,10 +1,7 @@
 import numpy as np
 import torch
 import os
-import natsort  # 用于自然排序
-import glob
 
-from moviepy.video.io.ImageSequenceClip import ImageSequenceClip
 from src.config import cfg
 
 
@@ -89,7 +86,7 @@ class Renderer:
         pts = xyz + samples.unsqueeze(-1) * viewdirs.unsqueeze(1)     # shape: (1024, 64, 3)
 
         # Render the coarse model, output_flat: (1024, 64, 4)
-        output_flat = self.run_network(pts, viewdirs)  # use the run_network function to handle chunking
+        output_flat = self._run_network(pts, viewdirs)  # use the _run_network function to handle chunking
 
         density = output_flat[..., 3]   # shape: (1024, 64)
         raw_rgb = output_flat[..., :3]      # shape: (1024, 64, 3)
@@ -155,7 +152,7 @@ class Renderer:
         pts = xyz + samples.unsqueeze(-1) * viewdirs.unsqueeze(1)     # shape: (1024, 192, 3)
 
         # Render the fine model, output_flat: (1024, 192, 4)
-        output_flat = self.run_network(pts, viewdirs, "fine")  # use the run_network function to handle chunking
+        output_flat = self._run_network(pts, viewdirs, "fine")  # use the _run_network function to handle chunking
 
         density = output_flat[..., 3]   # shape: (1024, 192)
         raw_rgb = output_flat[..., :3]      # shape: (1024, 192, 3)
@@ -242,7 +239,7 @@ class Renderer:
         samples = bins_lower + (bins_upper - bins_lower) * u_samples
         return samples
 
-    def run_network(self, pts, viewdirs, model_type="coarse"):
+    def _run_network(self, pts, viewdirs, model_type="coarse"):
         """
         This function is responsible for running the network on the given points and view directions in chunk_size.
 
@@ -273,44 +270,3 @@ class Renderer:
         output = torch.cat(all_outputs, dim=0)
         
         return output
-
-    def render_video_from_images(self, image_folder: str, fps: int = 24):
-        """
-        从图片序列渲染视频。
-        此版本硬编码为仅查找 'view*_pred.png' 格式的图片。
-        """
-        print(f"开始从文件夹 '{image_folder}' 渲染视频...")
-        print("模式: 将只使用 'view*_pred.png' 格式的图片。")
-
-        output_dir = os.path.join(cfg.result_dir, "videos")
-        os.makedirs(output_dir, exist_ok=True)
-        video_path = os.path.join(output_dir, "view_pred_video.mp4")
-
-        # 1. 定义文件搜索模式
-        # '*' 是一个通配符, 它会匹配 'view' 和 '_pred.png' 之间的任何字符
-        search_pattern = os.path.join(image_folder, 'view*_pred.png')
-
-        # 2. 使用 glob 查找所有匹配模式的图片文件
-        # glob.glob 会返回一个包含完整路径的列表
-        found_files = glob.glob(search_pattern)
-
-        # 3. 使用 natsort 对找到的文件路径进行自然排序
-        # 确保 view2.png 在 view10.png 之前
-        full_image_paths = natsort.natsorted(found_files)
-        
-        if not full_image_paths:
-            print(f"错误：在文件夹 '{image_folder}' 中没有找到符合 'view*_pred.png' 模式的图片。")
-            return
-
-        print(f"找到了 {len(full_image_paths)} 张匹配的图片进行渲染。")
-
-        # 4. 使用 MoviePy 基于处理后的完整路径列表创建剪辑
-        clip = ImageSequenceClip(full_image_paths, fps=fps)
-
-        # 5. 写入视频文件
-        print(f"正在将视频写入到 '{video_path}'...")
-        try:
-            clip.write_videofile(video_path, codec='libx264', logger='bar')
-            print(f"视频渲染成功！已保存在: {video_path}")
-        except Exception as e:
-            print(f"视频渲染失败: {e}")
