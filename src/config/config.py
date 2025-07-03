@@ -119,6 +119,9 @@ cfg.trained_model_dir = "data/trained_model"
 cfg.trained_config_dir = "data/trained_config"
 cfg.clean_tag = "debug"
 
+# teacher model
+cfg.teacher_model_dir = "data/teacher_model"
+
 # recorder
 cfg.record_dir = "data/record"
 
@@ -160,6 +163,9 @@ def parse_cfg(cfg, args):
     print("EXP NAME: ", cfg.exp_name)
     cfg.trained_model_dir = os.path.join(
         cfg.trained_model_dir, cfg.task, cfg.scene, cfg.exp_name
+    )
+    cfg.teacher_model_dir = os.path.join(
+        cfg.teacher_model_dir, cfg.task, cfg.scene, cfg.exp_name
     )
     cfg.trained_config_dir = os.path.join(
         cfg.trained_config_dir, cfg.task, cfg.scene, cfg.exp_name

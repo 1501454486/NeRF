@@ -3,10 +3,11 @@ gpus: [0] # set gpu device number
 exp_name: "kilonerf"
 scene: "lego"
 
+# kilonerf still use nerf's dataset
 train_dataset_module: src.datasets.nerf.blender
 test_dataset_module: src.datasets.nerf.blender
 network_module: src.models.kilonerf.network
-renderer_module: src.models.nerf.renderer.volume_renderer
+renderer_module: src.models.kilonerf.renderer.volume_renderer
 loss_module: src.train.trainers.nerf
 evaluator_module: src.evaluators.nerf
 
@@ -18,7 +19,7 @@ write_video: True
 
 task_arg:  
   N_rays: 8192 # number of rays in each batch
-  chunk_size: 4096 # number of rays processed in parallel
+  chunk_size: 8192 # number of points processed in parallel
   white_bkgd: 1 # use white background
   N_samples: 64 # number of samples per ray in coarse network
   N_importance: 128 # number of samples per ray in fine network
@@ -48,6 +49,10 @@ sampler:
   occ_threshold: 10
   # Early Ray Termination threshold eps
   ert_threshold: 0.01
+  # the maximum number of sampled points
+  max_points: 384
+  near: 2
+  far: 6
 
 
 network:

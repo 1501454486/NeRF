@@ -262,8 +262,25 @@ class Sampler(nn.Module):
                 new_near[global_miss_indices] = far[global_miss_indices]
                 active_rays_mask[global_miss_indices] = False
             
-            # 6. Update t for the next iteration for rays that are still active
-            t[active_rays_mask] = t_next[~past_far_mask & ~hit_mask]
+            # 6. Update t for the next iteration for rays that are still active.
+            # We must only update the 't' values for rays that are continuing the march.
+            # A direct assignment like `t[active_rays_mask] = t_next[...]` is risky because
+            # the number of elements on the left and right may mismatch after deactivation in steps 4 & 5.
+            
+            # Identify which of the currently active rays (from the start of the loop) will continue.
+            continuing_mask_in_active = ~hit_mask & ~past_far_mask
+            
+            # If there are any rays to continue...
+            if continuing_mask_in_active.any():
+                # Get the global indices of the rays that are continuing.
+                continuing_global_indices = active_indices[continuing_mask_in_active]
+                
+                # Get the corresponding t_next values for these rays.
+                t_next_for_continuing = t_next[continuing_mask_in_active]
+
+                # Update the main 't' tensor only at these specific global indices.
+                # This is robust to in-loop deactivations.
+                t[continuing_global_indices] = t_next_for_continuing
         
         return new_near.clamp_max(far)
 
