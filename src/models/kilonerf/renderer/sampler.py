@@ -7,11 +7,12 @@ from tqdm import tqdm
 import os
 
 
-class Sampler:
+class Sampler(nn.Module):
     """
     This module is responsible for sampling pts in the grids which are occupied and intersects with given viewdirs. Also, it maintains a uniform grid with a higher grid resolution in the given aabb, and use a pre-trained nerf model as teacher model to evaluate whether a grid is occupied.
     """
     def __init__(self):
+        super().__init__()
         self.teacher_model = make_network(cfg).cuda()
         load_network(self.teacher_model, cfg.teacher_model_dir)
         self.device = self.teacher_model.device
@@ -34,7 +35,7 @@ class Sampler:
         self.occ_grid = None
         self.register_buffer('aabb_min', torch.tensor(self.aabb['min'], device = self.device))
         self.register_buffer('aabb_max', torch.tensor(self.aabb['max'], device = self.device))
-        self.register_buffer('resolution_tensor', torch.tensor(self.occ_grid_resolution, device = self.device))
+        self.register_buffer('occ_grid_resolution_tensor', torch.tensor(self.occ_grid_resolution, device = self.device))
 
         # if already exists, load directly, else evaluate and save
         if os.path.exists(self.grid_path):
@@ -74,7 +75,7 @@ class Sampler:
         self.occ_grid = torch.zeros(self.occ_grid_resolution, dtype = torch.bool, device = self.device)
 
         # calculate size of every grid from aabb and resolution
-        cell_size = (self.aabb_max - self.aabb_min) / self.resolution_tensor
+        cell_size = (self.aabb_max - self.aabb_min) / self.occ_grid_resolution_tensor
 
         # calculate central coordinates of every cell
         x = torch.linspace(self.aabb_min[0], self.aabb_max[0], self.occ_grid_resolution[0] + 1, device = self.device)[:-1]
@@ -154,9 +155,9 @@ class Sampler:
 
 
 
-    def _sample(self, batch, is_training: bool = True):
+    def forward(self, batch, is_training: bool = True):
         """
-        _sample points from the given rays, using Eearly Ray Termination (only during inference) and Empty Space Skipping
+        sample points from the given rays, using Eearly Ray Termination (only during inference) and Empty Space Skipping
 
         @param batch: A batch from dataloader (rays, rgb) (Here we only need rays)
         @return: sampled pts (N_rays, N_samples, 3)
@@ -167,8 +168,8 @@ class Sampler:
         
         # 1. Find ray-AABB intersection to get initial near and far bounds
         N_rays = rays_o.shape[0]
-        near = torch.full((N_rays, ), self.near, device = self.device)
-        far = torch.full((N_rays, ), self.far, device = self.device)
+        near = torch.full((N_rays, ), self.near, device = self.device, dtype = torch.float32)
+        far = torch.full((N_rays, ), self.far, device = self.device, dtype = torch.float32)
 
         # 2. Use ray matching to skip empty space (ESS)
         with torch.no_grad():
@@ -192,7 +193,7 @@ class Sampler:
         # (N_rays, max_points, 3)
         pts = rays_o.unsqueeze(1) + viewdirs.unsqueeze(1) * z_vals.unsqueeze(-1)
 
-        return pts, indices, z_vals
+        return pts, z_vals
 
 
     @torch.no_grad()
@@ -206,51 +207,72 @@ class Sampler:
         @param far: (N, ) far plane for each ray.
         @return: (N, ) new near plane for each ray after skipping empty space.
         """
-        cell_diag_length = torch.norm((self.aabb_max - self.aabb_min) / torch.tensor(self.occ_grid_resolution, device = self.device))
-        step_size = cell_diag_length * 0.5      # march with half a cell diagonal
+        cell_diag_length = torch.norm((self.aabb_max - self.aabb_min) / self.occ_grid_resolution_tensor)
+        step_size = cell_diag_length * 0.5  # march with half a cell diagonal
 
         t = near.clone()
         new_near = near.clone()
 
-        active_rays_mask = torch.ones_like(near, dtype = torch.bool)
+        active_rays_mask = torch.ones_like(near, dtype=torch.bool)
 
         # March until all rays hit something or exceeded their far plane
         while active_rays_mask.any():
-            # Get current points on active points
-            current_points = rays_o[active_rays_mask] + rays_d[active_rays_mask] * t[active_rays_mask].unsqueeze(-1)
+            # 1. Calculate the t for the NEXT step for all currently active rays
+            t_next = t[active_rays_mask] + step_size
 
-            # Get grid indices for these points
+            # 2. Check for hits using the next step's position
+            current_points = rays_o[active_rays_mask] + rays_d[active_rays_mask] * t_next.unsqueeze(-1)
             indices = self._get_index(current_points)
 
-            # Check for out-of-bounds indices and get occupancy values
-            valid_mask = (indices >= 0).all(dim = -1) & (indices < torch.tensor(self.occ_grid_resolution, device = self.device)).all(dim = -1)
+            # Create default masks for the active set
+            valid_mask = (indices >= 0).all(dim=-1) & (indices < self.occ_grid_resolution_tensor).all(dim=-1)
+            hit_mask = torch.zeros(active_rays_mask.sum(), dtype=torch.bool, device=self.device)
 
-            occupied = torch.zeros_like(valid_mask)
+            # If any points are in valid grid cells, check their occupancy
             if valid_mask.any():
                 valid_indices = indices[valid_mask]
-                occupied[valid_mask] = self.occ_grid[valid_indices[:, 0], valid_indices[:, 1], valid_indices[:, 2]]
+                # Get occupancy and place it into the hit_mask at the correct positions
+                hit_mask[valid_mask] = self.occ_grid[valid_indices[:, 0], valid_indices[:, 1], valid_indices[:, 2]]
 
-            # For rays that hit an occupied cell, update their new_near and deactive them
-            hit_mask = occupied.clone()
-
-            # Update new_near for rays that found a hit in this step
+            # 3. For rays that are past the far plane, they are considered misses for this step
+            #    Their new_near will be set to far, and they will be deactivated.
+            past_far_mask = t_next > far[active_rays_mask]
+            
+            # A ray is a "miss" in this step if it's past far OR it didn't hit anything
+            # But we only deactivate it if it's past far. Hits are handled next.
+            miss_and_past_far = past_far_mask & ~hit_mask
+            
+            # Get global indices for updating the main tensors
             active_indices = torch.where(active_rays_mask)[0]
-            hit_indices_in_active = torch.where(hit_mask)[0]
-            global_hit_indices = active_indices[hit_indices_in_active]
 
-            new_near[global_hit_indices] = t[global_hit_indices]
+            # 4. Handle hits: Update new_near and deactivate the ray
+            if hit_mask.any():
+                hit_indices_in_active = torch.where(hit_mask)[0]
+                global_hit_indices = active_indices[hit_indices_in_active]
+                
+                # IMPORTANT: The new_near is the hit distance, but capped at 'far'
+                new_near[global_hit_indices] = torch.min(t_next[hit_indices_in_active], far[global_hit_indices])
+                active_rays_mask[global_hit_indices] = False
 
-            # Deactivate rays that have found a hit
-            active_rays_mask[global_hit_indices] = False
+            # 5. Handle rays that passed 'far' without hitting: Update new_near to 'far' and deactivate
+            if miss_and_past_far.any():
+                miss_indices_in_active = torch.where(miss_and_past_far)[0]
+                global_miss_indices = active_indices[miss_indices_in_active]
 
-            # For rays that haven't hit anything, advance their t value
-            t[active_rays_mask] += step_size
+                new_near[global_miss_indices] = far[global_miss_indices]
+                active_rays_mask[global_miss_indices] = False
+            
+            # 6. Update t for the next iteration for rays that are still active
+            t[active_rays_mask] = t_next[~past_far_mask & ~hit_mask]
+        
+        return new_near.clamp_max(far)
 
-            # Deactive rays that have marched past their far plane
-            past_far_mask = t > far
-            active_rays_mask &= ~past_far_mask
+    def _get_index(self, pts) -> torch.Tensor:
+        """
+        Get the index of the voxel grid.
 
-            # For rays that went past far without a hit, their near remains the original far
-            new_near[past_far_mask & ~hit_mask] = far[past_far_mask & ~hit_mask]
-
-        return new_near
+        @param pts: input tensor of shape (N, 3)
+        @return: index tensor of shape (N, 3)
+        """
+        index = ((pts - self.aabb_min) / ((self.aabb_max - self.aabb_min) / self.occ_grid_resolution_tensor)).long()
+        return index
