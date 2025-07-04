@@ -161,7 +161,6 @@ class Sampler(nn.Module):
 
         @param batch: A batch from dataloader (rays, rgb) (Here we only need rays)
         @return: sampled pts (N_rays, N_samples, 3)
-        @return: indices of pts to net (N_rays, N_samples, 3)
         @return: z_vals: sample pts indices (N_rays, N_samples)
         """
         rays_o, viewdirs = batch['xyz'].squeeze(0), batch['viewdirs'].squeeze(0)            # shape: (N_rays, 3)
