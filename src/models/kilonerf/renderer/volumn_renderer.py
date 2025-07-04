@@ -31,6 +31,8 @@ class VolumnRenderer():
         C_acc = torch.zeros((N_rays, 3), device = device)
         D_acc = torch.zeros((N_rays, 1), device = device)
         T_acc = torch.ones((N_rays, 1), device = device)
+        A_acc = torch.zeros((N_rays, 1), device = device)
+
         active_rays_mask = torch.ones(N_rays, dtype = torch.bool, device = device)
 
         # 3. begin ray marching loop
@@ -68,6 +70,7 @@ class VolumnRenderer():
             C_acc[active_rays_mask] += weight * torch.sigmoid(rgb)
             D_acc[active_rays_mask] += weight * t_mid.unsqueeze(-1)
             T_acc[active_rays_mask] *= T_step
+            A_acc[active_rays_mask] += weight
 
             # d/e. check if terminated and compression
             current_active_indices = torch.where(active_rays_mask)[0]
@@ -84,6 +87,7 @@ class VolumnRenderer():
         image = {}
         image['rgb_map'] = C_acc
         image['depth_map'] = D_acc
+        image['alpha_map'] = A_acc
         return image
 
 
