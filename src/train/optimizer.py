@@ -1,28 +1,24 @@
 import torch
 from src.utils.optimizer.radam import RAdam
+from tqdm import tqdm
 
 
 _optimizer_factory = {"adam": torch.optim.Adam, "radam": RAdam, "sgd": torch.optim.SGD}
 
 
 def make_optimizer(cfg, net):
-    params = []
     lr = cfg.train.lr
     weight_decay = cfg.train.weight_decay
     eps = cfg.train.eps
 
-    for key, value in net.named_parameters():
-        if not value.requires_grad:
-            continue
-        params += [
-            {"params": [value], "lr": lr, "weight_decay": weight_decay, "eps": eps}
-        ]
+    # 直接获取所有需要梯度的参数，无需循环！
+    trainable_params = filter(lambda p: p.requires_grad, net.parameters())
 
     if "adam" in cfg.train.optim:
         optimizer = _optimizer_factory[cfg.train.optim](
-            params, lr, weight_decay=weight_decay, eps=eps
+            trainable_params, lr, weight_decay=weight_decay, eps=eps
         )
     else:
-        optimizer = _optimizer_factory[cfg.train.optim](params, lr, momentum=0.9)
+        optimizer = _optimizer_factory[cfg.train.optim](trainable_params, lr, momentum=0.9)
 
     return optimizer

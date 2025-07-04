@@ -96,9 +96,9 @@ class Dataset(data.Dataset):
         origin_xyz = np.broadcast_to(origin_xyz, viewdirs.shape)
         
         batch = {}
-        batch['xyz'] = torch.tensor(origin_xyz)
-        batch['viewdirs'] = torch.tensor(viewdirs)
-        batch['gt_rgb'] = torch.tensor(rgb)
+        batch['xyz'] = torch.tensor(origin_xyz, dtype = torch.float32)
+        batch['viewdirs'] = torch.tensor(viewdirs, dtype = torch.float32)
+        batch['gt_rgb'] = torch.tensor(rgb, dtype = torch.float32)
         batch['id'] = index
         batch['num_imgs'] = len(self.frames)
         batch['H'] = H

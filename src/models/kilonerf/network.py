@@ -177,8 +177,20 @@ class Network(nn.Module):
         @param pts: input tensor of shape (N, 3)
         @return: index tensor of shape (N, 3)
         """
-        index = ((pts - self.aabb_min) / ((self.aabb_max - self.aabb_min) / self.grid_resolution)).long()
-        return index
+        # 1. Normalize points to [0, 1] range based on the bounding box
+        normalized_pts = (pts - self.aabb_min) / (self.aabb_max - self.aabb_min)
+        
+        # 2. Scale points to the grid resolution
+        scaled_pts = normalized_pts * self.grid_resolution
+        
+        # 3. Clamp the indices to the valid range [0, resolution-1]
+        #    This is the key fix to prevent out-of-bounds errors.
+        clamped_pts = torch.clamp(scaled_pts, min=0)
+        max_bounds = self.grid_resolution.float() - 1.0
+        clamped_pts = torch.min(clamped_pts, max_bounds)
+        
+        # 4. Convert to long integer for indexing
+        return clamped_pts.long()
 
     def _get_model(self, index):
         """

@@ -55,6 +55,7 @@ class VolumnRenderer(nn.Module):
             # b. query network in batch
             rgb, density = self.net(pts.unsqueeze(1), viewdirs[active_rays_mask])
             rgb = rgb.squeeze(1)
+            density = density.squeeze(1)
             
             # add Gaussian noise to density if specified and only during trainings
             if self.raw_noise_std > 0 and is_training:
