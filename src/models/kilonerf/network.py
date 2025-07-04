@@ -199,3 +199,27 @@ class Network(nn.Module):
             )
 
         return ret
+
+
+    def get_color_reg_loss(self):
+        """
+        Calculate the L2 loss for the color-dependent layers
+        """
+        reg_loss = 0.0
+        # traverse all the KiloNeRF models of this network
+        for i in range(self.grid_resolution[0]):
+            for j in range(self.grid_resolution[1]):
+                for k in range(self.grid_resolution[2]):
+                    model = self.model[i][j][k]
+
+                    # extract layers concerning viewdirs
+                    color_layer_1 = model.view_linears[0]
+                    color_layer_2 = model.rgb_linear
+
+                    # calculate L2 norm of weights and biases
+                    reg_loss += torch.sum(color_layer_1.weight ** 2)
+                    reg_loss += torch.sum(color_layer_1.bias ** 2)
+                    reg_loss += torch.sum(color_layer_2.weight ** 2)
+                    reg_loss += torch.sum(color_layer_2.bias ** 2)
+
+        return reg_loss

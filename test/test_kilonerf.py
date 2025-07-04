@@ -143,6 +143,60 @@ def test_indexing(network, cfg):
     print("\n--- Indexing Test Passed! ---")
 
 
+def test_color_reg_loss(network, cfg):
+    """
+    测试4: 验证颜色正则化损失计算的正确性。
+    """
+    print("\n" + "="*50)
+    print("--- Running Test 4: Color Regularization Loss ---")
+    print("="*50)
+
+    # 1. 检查 network 对象中是否有 get_color_reg_loss 方法
+    assert hasattr(network, 'get_color_reg_loss') and callable(getattr(network, 'get_color_reg_loss')), \
+        "Network class is missing the 'get_color_reg_loss' method."
+    print("[*] 'get_color_reg_loss' method found.")
+
+    with torch.no_grad():
+        # 2. 计算初始损失
+        loss_before = network.get_color_reg_loss()
+        print(f"[*] Initial regularization loss: {loss_before.item():.6f}")
+        assert loss_before >= 0, "Regularization loss should be non-negative."
+
+        # 3. 选择一个参数进行修改
+        # 我们选择第一个子网络的 rgb_linear 层的第一个权重
+        target_model = network.model[0][0][0]
+        param_to_change = target_model.rgb_linear.weight
+        original_value = param_to_change.data[0, 0].clone()
+        
+        # 4. 手动修改该参数
+        delta = 1.0
+        print(f"[*] Modifying a weight in model (0,0,0)'s rgb_linear layer from {original_value.item():.6f} by {delta}.")
+        param_to_change.data[0, 0] += delta
+
+        # 5. 计算修改后的损失
+        loss_after = network.get_color_reg_loss()
+        print(f"[*] Loss after modification: {loss_after.item():.6f}")
+
+        # 6. 验证损失变化是否符合预期
+        # 损失的变化量应为 (w+delta)^2 - w^2
+        expected_change = (original_value + delta)**2 - original_value**2
+        actual_change = loss_after - loss_before
+        
+        print(f"[*] Expected loss change: {expected_change.item():.6f}")
+        print(f"[*] Actual loss change:   {actual_change.item():.6f}")
+        
+        assert torch.allclose(actual_change, expected_change, atol=1e-2), "The change in regularization loss is not as expected."
+        print("[+] Loss change is correct.")
+
+        # 7. 恢复原始权重，避免影响其他测试
+        param_to_change.data[0, 0] = original_value
+        loss_restored = network.get_color_reg_loss()
+        assert torch.allclose(loss_restored, loss_before, atol=1e-5), "Failed to restore the original weight."
+        print("[*] Original weight restored successfully.")
+
+    print("\n--- Color Regularization Loss Test Passed! ---")
+
+
 if __name__ == "__main__":
     # ==================================
     # ===      基本功能测试 (SMOKE TEST)
@@ -203,6 +257,7 @@ if __name__ == "__main__":
         # 如果基础测试通过，则进行更详细的测试
         test_batchify(network, cfg)
         test_indexing(network, cfg)
+        test_color_reg_loss(network, cfg)
         
         print("\n" + "="*50)
         print("--- ALL TESTS PASSED SUCCESSFULLY! ---")
