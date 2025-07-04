@@ -1,9 +1,10 @@
 import torch
 import torch.nn as nn
 from src.models.kilonerf.renderer.sampler import Sampler
+from src.config import cfg
 
 
-class VolumnRenderer():
+class VolumnRenderer(nn.Module):
     def __init__(self, net):
         super().__init__()
         self.sampler = Sampler()
@@ -12,7 +13,7 @@ class VolumnRenderer():
         self.ert_threshold = cfg.sampler.ert_threshold
 
 
-    def render(self, batch, is_training: bool = True):
+    def forward(self, batch, is_training: bool = True):
         """
         Performs volumn rendering on raw NeRF output
 
