@@ -134,6 +134,18 @@ cfg.skip_eval = False
 cfg.fix_random = False
 
 
+# -----------------------------------------------------------------------------
+# teacher
+# -----------------------------------------------------------------------------
+cfg.teacher = CN()
+cfg.teacher.base_dir = "data/teacher_model"
+cfg.teacher.task = ""
+cfg.teacher.scene = ""
+cfg.teacher.exp_name = ""
+cfg.teacher.checkpoint_name = "latest.pth"
+cfg.teacher.model_path = ""
+
+
 def parse_cfg(cfg, args):
     if len(cfg.task) == 0:
         raise ValueError("task must be specified")
@@ -164,9 +176,6 @@ def parse_cfg(cfg, args):
     cfg.trained_model_dir = os.path.join(
         cfg.trained_model_dir, cfg.task, cfg.scene, cfg.exp_name
     )
-    cfg.teacher_model_dir = os.path.join(
-        cfg.teacher_model_dir, cfg.task, cfg.scene, cfg.exp_name
-    )
     cfg.trained_config_dir = os.path.join(
         cfg.trained_config_dir, cfg.task, cfg.scene, cfg.exp_name
     )
@@ -174,6 +183,16 @@ def parse_cfg(cfg, args):
     cfg.result_dir = os.path.join(
         cfg.result_dir, cfg.task, cfg.scene, cfg.exp_name, cfg.save_tag
     )
+    if cfg.teacher.task:
+        if not all([cfg.teacher.scene, cfg.teacher.exp_name]):
+            raise ValueError("teacher scene and teacher exp_name must be assigned!")
+        
+        cfg.teacher_model_dir = os.path.join(
+            cfg.teacher_model_dir,
+            cfg.teacher.task,
+            cfg.teacher.scene,
+            cfg.teacher.exp_name
+        )
     cfg.local_rank = args.local_rank
     modules = [key for key in cfg if "_module" in key]
     for module in modules:

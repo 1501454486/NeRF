@@ -44,12 +44,13 @@ class Trainer(object):
         max_iter = len(data_loader)
         self.network.train()
         end = time.time()
-        for iteration, batch in enumerate(data_loader):
+        for iteration, batch in enumerate(tqdm.tqdm(data_loader, desc=f"Epoch {epoch} Training")):
             data_time = time.time() - end
             iteration = iteration + 1
 
             batch = to_cuda(batch, self.device)
             batch["step"] = self.global_step
+            batch["epoch"] = epoch
             output, loss, loss_stats, image_stats = self.network(batch)
 
             # training stage: loss; optimizer; scheduler

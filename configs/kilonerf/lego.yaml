@@ -8,11 +8,16 @@ train_dataset_module: src.datasets.nerf.blender
 test_dataset_module: src.datasets.nerf.blender
 network_module: src.models.kilonerf.network
 renderer_module: src.models.kilonerf.renderer.volume_renderer
-loss_module: src.train.trainers.nerf
+loss_module: src.train.trainers.kilonerf
 evaluator_module: src.evaluators.nerf
 
 # teacher model
 teacher_model_module: src.models.nerf.network
+
+teacher:
+  task: "nerf_replication"
+  scene: "lego"
+  exp_name: "nerf"
 
 
 write_video: True
@@ -40,6 +45,9 @@ task_arg:
 
   # resolution: (rx, ry, rz)
   grid_resolution: [16, 16, 16] # resolution of the voxel grid
+  # apply  l2 regularization to weights and biases of the last 2 layers of the network
+  l2_reg: 1e-6
+  # epochs of distillation
 
 
 sampler:
@@ -112,7 +120,8 @@ train:
   batch_size: 1
   lr: 5e-4 # learning rate
   weight_decay: 0.
-  epoch: 600
+  ep_dist: 300      # 150k iters for distillation
+  ep_ft: 2000       # 1000k iters for fine-tuning
   optim: 'adam'
   scheduler:
     type: "exponential"
