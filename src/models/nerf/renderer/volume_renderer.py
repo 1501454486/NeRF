@@ -42,14 +42,15 @@ class Renderer:
 
         Write your codes here.
         """
-        coarse_rgb_map, coarse_depth_map, w_i_coarse = self.render_coarse(batch, is_training)
-        fine_rgb_map, fine_depth_map = self.render_fine(batch, w_i_coarse, is_training)
+        coarse_rgb_map, coarse_depth_map, w_i_coarse, _ = self.render_coarse(batch, is_training)
+        fine_rgb_map, fine_depth_map, fine_alpha_map = self.render_fine(batch, w_i_coarse, is_training)
 
         image = {}
         image['coarse_rgb_map'] = coarse_rgb_map
         image['coarse_depth_map'] = coarse_depth_map
         image['fine_rgb_map'] = fine_rgb_map
         image['fine_depth_map'] = fine_depth_map
+        image['alpha_map'] = fine_alpha_map
 
         return image
 
@@ -107,6 +108,9 @@ class Renderer:
         w_i = T_i * alpha   # shape: (1024, 64)
         
         rgb_map = torch.sum(w_i.unsqueeze(-1) * rgb, dim=-2)  # shape: (1024, 3)
+        # accumulated alpha
+        alpha_map = torch.sum(w_i, dim = -1, keepdim = True)
+
         # add background color if white_bkgd is True
         if self.white_bkgd > 0:
             acc_map = torch.sum(w_i, -1)
@@ -114,7 +118,7 @@ class Renderer:
         # depth value is the expected value of weight
         depth_map = torch.sum(w_i * samples, dim=-1)      # shape: (1024)
 
-        return rgb_map, depth_map, w_i
+        return rgb_map, depth_map, w_i, alpha_map
         
     def render_fine(self, batch, weights, is_training: bool = True):
         """
@@ -173,6 +177,9 @@ class Renderer:
         w_i = T_i * alpha   # shape: (1024, 192)
         
         rgb_map = torch.sum(w_i.unsqueeze(-1) * rgb, dim=-2)  # shape: (1024, 3)
+        # accumulated alpha
+        alpha_map = torch.sum(w_i, dim = -1, keepdim = True)
+        
         # add background color if white_bkgd is True
         if self.white_bkgd > 0:
             acc_map = torch.sum(w_i, -1)
@@ -180,7 +187,7 @@ class Renderer:
         # depth value is the expected value of weight
         depth_map = torch.sum(w_i * samples, dim=-1)      # shape: (1024)
 
-        return rgb_map, depth_map
+        return rgb_map, depth_map, alpha_map
 
     def add_perturbation(self, samples):
         """
