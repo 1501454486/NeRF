@@ -4,9 +4,9 @@ from src.models.kilonerf.renderer.sampler import Sampler
 
 
 class VolumnRenderer():
-    def __init__(self, sampler, net):
+    def __init__(self, net):
         super().__init__()
-        self.sampler = sampler
+        self.sampler = Sampler()
         self.net = net
         self.raw_noise_std = cfg.task_arg.raw_noise_std
         self.ert_threshold = cfg.sampler.ert_threshold
