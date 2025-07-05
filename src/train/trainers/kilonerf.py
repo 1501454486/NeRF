@@ -6,19 +6,15 @@ from src.models.kilonerf.renderer.volumn_renderer import VolumnRenderer
 
 
 class NetworkWrapper(nn.Module):
-    def __init__(self, net, teacher_network = None):
+    def __init__(self, net, train_loader = None):
         super().__init__()
         self.net = net
         self.renderer = VolumnRenderer(net)
-        self.teacher_network = teacher_network
-
-        if teacher_network is not None:
-            self.teacher_network.eval()
 
         self.l2_reg = cfg.task_arg.get('l2_reg', 0.0)
         self.ep_dist = cfg.train.ep_dist
         self.ep_ft = cfg.train.ep_ft
-
+        self.train_loader = train_loader
 
     def forward(self, batch):
         """
@@ -33,7 +29,7 @@ class NetworkWrapper(nn.Module):
         """
         is_training = batch['is_training']
         epoch = batch.get('epoch', 0)
-        stage = 'distillation' if epoch < self.ep_dist else 'fine-tuning'
+        stage = batch['stage']
 
         student_image = self.renderer(batch, is_training)
         student_rgb = student_image['rgb_map']
@@ -42,15 +38,8 @@ class NetworkWrapper(nn.Module):
         loss_stats, image_stats = {}, {}
 
         if stage == 'distillation':
-            if self.teacher_network is None:
-                raise ValueError("Teacher network is required for distillation")
-
-            # Use teacher model for labels
-            with torch.no_grad():
-                teacher_output, _, _, _ = self.teacher_network(batch)
-                teacher_rgb = teacher_output['fine_rgb_map']
-                teacher_alpha = teacher_output['alpha_map']
-
+            teacher_rgb = batch['teacher_rgb']
+            teacher_alpha = batch['teacher_alpha']
             loss_color = nn.functional.mse_loss(teacher_rgb, student_rgb)
             loss_alpha = nn.functional.mse_loss(teacher_alpha, student_alpha)
             loss = loss_color + loss_alpha

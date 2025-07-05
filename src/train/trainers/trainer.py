@@ -40,7 +40,7 @@ class Trainer(object):
                 batch[k] = batch[k].to(self.device)
         return batch
 
-    def train(self, epoch, data_loader, optimizer, recorder):
+    def train(self, epoch, data_loader, optimizer, recorder, stage = None):
         max_iter = len(data_loader)
         self.network.train()
         end = time.time()
@@ -52,6 +52,8 @@ class Trainer(object):
             batch["step"] = self.global_step
             batch["epoch"] = epoch
             batch['is_training'] = True
+            if stage is not None:
+                batch['stage'] = stage
             output, loss, loss_stats, image_stats = self.network(batch)
 
             # training stage: loss; optimizer; scheduler

@@ -74,8 +74,8 @@ def generate_distillation_data():
         # 提取需要的数据 (光线原点/方向, 教师模型的输出)
         # 确保这些键名与 renderer 的返回一致
         output_data = {
-            'xyz': batch['xyz'].cpu(),
-            'viewdirs': batch['viewdirs'].cpu(),
+            'xyz': batch['xyz'].squeeze(0).cpu(),
+            'viewdirs': batch['viewdirs'].squeeze(0).cpu(),
             'teacher_rgb': render_result['fine_rgb_map'].cpu(),
             'teacher_alpha': render_result['alpha_map'].cpu()
         }

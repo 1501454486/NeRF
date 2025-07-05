@@ -4,10 +4,11 @@ from src.models.nerf.renderer.volume_renderer import Renderer
 
 
 class NetworkWrapper(nn.Module):
-    def __init__(self, net):
+    def __init__(self, net, train_loader = None):
         super(NetworkWrapper, self).__init__()
         self.net = net
         self.renderer = Renderer(self.net)
+        self.train_loader = train_loader
 
         # add metrics here
 

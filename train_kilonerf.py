@@ -39,12 +39,12 @@ def train(cfg, network):
     # dataloader for distillation
     if cfg.train.ep_dist > 0:
         dist_loader = make_data_loader(
-            cfg, is_train = True, is_distributed = cfg.is_distributed, max_iter = cfg.ep_iter, is_dist = True
+            cfg, is_train = True, is_distributed = cfg.distributed, max_iter = cfg.ep_iter, is_dist = True
         )
     # dataloader for fine-tuning
     if cfg.train.epoch > cfg.train.ep_dist:
         ft_loader = make_data_loader(
-            cfg, is_train = True, is_distributed = cfg.is_distributed, max_iter = cfg.ep_iter, is_dist = False
+            cfg, is_train = True, is_distributed = cfg.distributed, max_iter = cfg.ep_iter, is_dist = False
         )
 
     trainer = make_trainer(cfg, network, None)
@@ -84,10 +84,9 @@ def train(cfg, network):
         if cfg.distributed:
             train_loader.batch_sampler.sampler.set_epoch(epoch)
 
-        if hasattr(train_loader.dataset, 'epoch'):
-            train_loader.dataset.epoch = epoch
+        train_loader.dataset.epoch = epoch
 
-        trainer.train(epoch, train_loader, optimizer, recorder)
+        trainer.train(epoch, train_loader, optimizer, recorder, stage)
 
         scheduler.step()
 

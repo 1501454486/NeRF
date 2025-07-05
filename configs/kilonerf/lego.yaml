@@ -119,6 +119,7 @@ test_dataset:
 
 dist_dataset:
   data_root: "data/lego/distilled"
+  split: "train"
 
 train:
   single_view: False

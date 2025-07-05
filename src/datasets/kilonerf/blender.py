@@ -4,6 +4,7 @@ import numpy as np
 from src.config import cfg
 import json
 import os
+from tqdm import tqdm
 from PIL import Image
 
 
