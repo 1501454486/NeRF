@@ -60,7 +60,7 @@ sampler:
   # Early Ray Termination threshold eps
   ert_threshold: 0.01
   # the maximum number of sampled points
-  max_points: 384
+  max_points: 192
   near: 2
   far: 6
 
