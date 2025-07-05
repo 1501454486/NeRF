@@ -22,12 +22,16 @@ class VolumnRenderer(nn.Module):
         @param batch: (N_rays, N_samples, 4) raw output from the model (rgb, density)
         @return: Dictionary with rendered RGB values and depth values
         """
-        # shape: (N_rays, 3)
-        rays_o, viewdirs = batch['xyz'].squeeze(0), batch['viewdirs'].squeeze(0)
-        N_rays = rays_o.shape[0]
+        # shape: (batch_size, N_rays, 3)
+        rays_o, viewdirs = batch['xyz'], batch['viewdirs']
+        batch_size, N_rays, _ = rays_o.shape
         device = rays_o.device
+        # flatten a batch
+        rays_o = rays_o.view(-1, 3)
+        viewdirs = viewdirs.view(-1, 3)
 
         # 1. Use Sampler to get initial z_vals, Sampler.forward will return z_vals(N_rays, N_samples), which represent all the potential sample regions
+        # shape of z_vals: (B * N_rays, N_samples)
         _, z_vals = self.sampler(batch, is_training)
 
         # 2. Initialize color, depth and T accumulation
@@ -39,7 +43,7 @@ class VolumnRenderer(nn.Module):
         active_rays_mask = torch.ones(N_rays, dtype = torch.bool, device = device)
 
         # 3. begin ray marching loop
-        # shape of z_vals is (N_rays, N_samples), march in the sample dimension
+        # shape of z_vals is (B * N_rays, N_samples), march in the sample dimension
         for i in range(0, z_vals.shape[1] - 1, self.chunk_size):
             # if all rays have terminated
             if not active_rays_mask.any():
@@ -107,9 +111,9 @@ class VolumnRenderer(nn.Module):
 
         D_acc = D_acc + T_acc * self.sampler.far
         image = {}
-        image['rgb_map'] = C_acc
-        image['depth_map'] = D_acc
-        image['alpha_map'] = A_acc
+        image['rgb_map'] = C_acc.view(batch_size, N_rays, 3)
+        image['depth_map'] = D_acc.view(batch_size, N_rays, 1)
+        image['alpha_map'] = A_acc.view(batch_size, N_rays, 1)
         return image
 
 

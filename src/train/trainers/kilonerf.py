@@ -32,7 +32,9 @@ class NetworkWrapper(nn.Module):
         stage = batch['stage']
 
         student_image = self.renderer(batch, is_training)
+        # shape of student_rgb: (B, N_rays, 3)
         student_rgb = student_image['rgb_map']
+        # shape of student_alpha: (B, N_rays, 1)
         student_alpha = student_image['alpha_map']
 
         loss_stats, image_stats = {}, {}
@@ -40,8 +42,8 @@ class NetworkWrapper(nn.Module):
         if stage == 'distillation':
             teacher_rgb = batch['teacher_rgb']
             teacher_alpha = batch['teacher_alpha']
-            loss_color = nn.functional.mse_loss(teacher_rgb, student_rgb)
-            loss_alpha = nn.functional.mse_loss(teacher_alpha, student_alpha)
+            loss_color = nn.functional.mse_loss(teacher_rgb.view(-1, 3), student_rgb.view(-1, 3))
+            loss_alpha = nn.functional.mse_loss(teacher_alpha.view(-1, 3), student_alpha.view(-1, 1))
             loss = loss_color + loss_alpha
 
             loss_stats.update(loss_color = loss_color, loss_alpha = loss_alpha)
@@ -52,8 +54,9 @@ class NetworkWrapper(nn.Module):
                 loss += loss_reg
 
         elif stage == 'fine-tuning':
+            # shape: (B, H, W, 3)
             gt_rgb = batch['gt_rgb']
-            loss = nn.functional.mse_loss(gt_rgb, student_rgb)
+            loss = nn.functional.mse_loss(gt_rgb.view(-1, 3), student_rgb.view(-1, 3))
             loss_stats.update(loss_finetune_mse = loss)
             image_stats.update(rgb_map = student_rgb, gt_rgb = gt_rgb)
         else:

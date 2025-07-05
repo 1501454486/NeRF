@@ -163,7 +163,12 @@ class Sampler(nn.Module):
         @return: sampled pts (N_rays, N_samples, 3)
         @return: z_vals: sample pts indices (N_rays, N_samples)
         """
-        rays_o, viewdirs = batch['xyz'].squeeze(0), batch['viewdirs'].squeeze(0)            # shape: (N_rays, 3)
+        # shape: (batch_size, N_rays, 3)
+        rays_o, viewdirs = batch['xyz'], batch['viewdirs']
+        batch_size, N_rays, _ = rays_o.shape
+
+        rays_o = rays_o.view(-1, 3)
+        viewdirs = viewdirs.view(-1, 3)
         
         # 1. Find ray-AABB intersection to get initial near and far bounds
         N_rays = rays_o.shape[0]
@@ -191,6 +196,12 @@ class Sampler(nn.Module):
         # Calculate smaple point coordinates
         # (N_rays, max_points, 3)
         pts = rays_o.unsqueeze(1) + viewdirs.unsqueeze(1) * z_vals.unsqueeze(-1)
+
+        N_samples = pts.shape[1]
+        # z_vals: (B * N_rays, N_samples), we won't change them
+
+        # pts: (B * N_rays, N_samples, 3) -> (B, N_rays, N_samples, 3)
+        pts = pts.view(batch_size, N_rays, N_samples, 3)
 
         return pts, z_vals
 
