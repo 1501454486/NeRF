@@ -26,8 +26,7 @@ def generate_distillation_data():
 
     # --- 1. Setup Teacher Model and Renderer ---
     # 我们需要加载的是教师模型，其配置在 cfg.teacher 中
-    # 我们临时将主 cfg 的网络部分替换为 teacher 的配置
-    cfg.network = cfg.teacher.network 
+    # 我们临时将主 cfg 的网络部分替换为 teacher 的配置 
     teacher_network = make_network(cfg, "nerf")
     
     # 从配置文件指定的目录加载教师模型权重
