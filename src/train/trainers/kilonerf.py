@@ -6,7 +6,7 @@ from src.models.kilonerf.renderer.volumn_renderer import VolumnRenderer
 
 
 class NetworkWrapper(nn.Module):
-    def __init__(self, net, train_loader, teacher_network = None):
+    def __init__(self, net, teacher_network = None):
         super().__init__()
         self.net = net
         self.renderer = VolumnRenderer(net)
@@ -14,8 +14,6 @@ class NetworkWrapper(nn.Module):
 
         if teacher_network is not None:
             self.teacher_network.eval()
-        
-        self.is_training = train_loader is not None and train_loader.dataset.split == 'train'
 
         self.l2_reg = cfg.task_arg.get('l2_reg', 0.0)
         self.ep_dist = cfg.train.ep_dist
@@ -33,17 +31,18 @@ class NetworkWrapper(nn.Module):
         @param teacher_rgb: rgb result of batch from teacher model
         @param teacher_alpha: alpha result of batch from teacher model
         """
+        is_training = batch['is_training']
         epoch = batch.get('epoch', 0)
         stage = 'distillation' if epoch < self.ep_dist else 'fine-tuning'
 
-        student_image = self.renderer(batch, self.is_training)
+        student_image = self.renderer(batch, is_training)
         student_rgb = student_image['rgb_map']
         student_alpha = student_image['alpha_map']
 
         loss_stats, image_stats = {}, {}
 
         if stage == 'distillation':
-            if self.teacher_network is not None:
+            if self.teacher_network is None:
                 raise ValueError("Teacher network is required for distillation")
 
             # Use teacher model for labels

@@ -4,7 +4,7 @@ from src.models.nerf.renderer.volume_renderer import Renderer
 
 
 class NetworkWrapper(nn.Module):
-    def __init__(self, net, train_loader):
+    def __init__(self, net):
         super(NetworkWrapper, self).__init__()
         self.net = net
         self.renderer = Renderer(self.net)
@@ -16,7 +16,8 @@ class NetworkWrapper(nn.Module):
         Write your codes here.
         """
         gt_rgb = batch['gt_rgb']
-        output = self.renderer.render(batch)
+        is_training = batch['is_training']
+        output = self.renderer.render(batch, is_training)
         coarse_rgb_map = output['coarse_rgb_map']
         fine_rgb_map = output['fine_rgb_map']
 

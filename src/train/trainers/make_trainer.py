@@ -14,15 +14,13 @@ def _wrapper_factory(cfg, network, train_loader=None):
         teacher_network = make_network(cfg, "nerf")
         print("teacher model dir: ", cfg.teacher_model_dir)
         load_network(teacher_network, cfg.teacher_model_dir)
-        teacher_model = TeacherNetworkWrapper(teacher_network, train_loader = None)
-        network_wrapper = imp.load_source(cfg.loss_module, cfg.loss_path).NetworkWrapper(
-            network, train_loader, teacher_network = teacher_model
-        )
+        teacher_model = TeacherNetworkWrapper(teacher_network)
+        network_wrapper = imp.load_source(cfg.loss_module, cfg.loss_path).NetworkWrapper(network, teacher_network = teacher_model)
         
     else:
         module = cfg.loss_module
         path = cfg.loss_path
-        network_wrapper = imp.load_source(module, path).NetworkWrapper(network, train_loader)
+        network_wrapper = imp.load_source(module, path).NetworkWrapper(network)
 
     return network_wrapper
 

@@ -51,6 +51,7 @@ class Trainer(object):
             batch = to_cuda(batch, self.device)
             batch["step"] = self.global_step
             batch["epoch"] = epoch
+            batch['is_training'] = True
             output, loss, loss_stats, image_stats = self.network(batch)
 
             # training stage: loss; optimizer; scheduler
@@ -103,6 +104,8 @@ class Trainer(object):
         for batch in tqdm.tqdm(data_loader):
             batch = to_cuda(batch, self.device)
             batch["step"] = recorder.step
+            batch['epoch'] = epoch
+            batch['is_training'] = False
             with torch.no_grad():
                 output, loss, loss_stats, _ = self.network(batch)
                 if evaluator is not None:
