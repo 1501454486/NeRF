@@ -43,7 +43,7 @@ class NetworkWrapper(nn.Module):
             teacher_rgb = batch['teacher_rgb']
             teacher_alpha = batch['teacher_alpha']
             loss_color = nn.functional.mse_loss(teacher_rgb.view(-1, 3), student_rgb.view(-1, 3))
-            loss_alpha = nn.functional.mse_loss(teacher_alpha.view(-1, 3), student_alpha.view(-1, 1))
+            loss_alpha = nn.functional.mse_loss(teacher_alpha.view(-1, 1), student_alpha.view(-1, 1))
             loss = loss_color + loss_alpha
 
             loss_stats.update(loss_color = loss_color, loss_alpha = loss_alpha)
