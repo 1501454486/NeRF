@@ -13,8 +13,11 @@ from torch.utils.data import DataLoader, ConcatDataset
 torch.multiprocessing.set_sharing_strategy("file_system")
 
 
-def _dataset_factory(is_train, is_val=False):
-    if is_val:
+def _dataset_factory(is_train, is_val=False, is_dist=False):
+    if is_dist:
+        module = cfg.dist_dataset_module
+        path = cfg.dist_dataset_path
+    elif is_val:
         module = cfg.val_dataset_module
         path = cfg.val_dataset_path
     elif is_train:
@@ -29,8 +32,8 @@ def _dataset_factory(is_train, is_val=False):
     return dataset
 
 
-def make_dataset(cfg, is_train=True):
-    dataset = _dataset_factory(is_train)
+def make_dataset(cfg, is_train=True, is_dist=False):
+    dataset = _dataset_factory(is_train, is_dist)
     return dataset
 
 

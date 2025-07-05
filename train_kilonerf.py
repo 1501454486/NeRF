@@ -31,12 +31,23 @@ if cfg.fix_random:
 def train(cfg, network):
 
     save_trained_config(cfg)
-    train_loader = make_data_loader(
-        cfg, is_train=True, is_distributed=cfg.distributed, max_iter=cfg.ep_iter
-    )
+    # train_loader = make_data_loader(
+    #     cfg, is_train=True, is_distributed=cfg.distributed, max_iter=cfg.ep_iter
+    # )
     val_loader = make_data_loader(cfg, is_train=False)
 
-    trainer = make_trainer(cfg, network, train_loader)
+    # dataloader for distillation
+    if cfg.train.ep_dist > 0:
+        dist_loader = make_data_loader(
+            cfg, is_train = True, is_distributed = cfg.is_distributed, max_iter = cfg.ep_iter, is_dist = True
+        )
+    # dataloader for fine-tuning
+    if cfg.train.epoch > cfg.train.ep_dist:
+        ft_loader = make_data_loader(
+            cfg, is_train = True, is_distributed = cfg.is_distributed, max_iter = cfg.ep_iter, is_dist = False
+        )
+
+    trainer = make_trainer(cfg, network, None)
     optimizer = make_optimizer(cfg, network)
     scheduler = make_lr_scheduler(cfg, optimizer)
     recorder = make_recorder(cfg)
@@ -57,15 +68,24 @@ def train(cfg, network):
 
     for epoch in range(begin_epoch, cfg.train.epoch):
         recorder.epoch = epoch
+
+        # decide which loader to use according to current epoch
+        if epoch < cfg.train.ep_dist:
+            stage = 'distillation'
+            train_loader = dist_loader
+        else:
+            stage = 'fine-tuning'
+            if epoch == cfg.train.ep_dist:
+                print("\n" + "=" * 30)
+                print("Switching from Distillation to Fine-tuning")
+                print("\n" + "=" * 30)
+            train_loader = ft_loader
+
         if cfg.distributed:
             train_loader.batch_sampler.sampler.set_epoch(epoch)
 
-        train_loader.dataset.epoch = epoch
-
-        if epoch < cfg.train.ep_dist:
-            stage = 'distillation'
-        else:
-            stage = 'fine-tuning'
+        if hasattr(train_loader.dataset, 'epoch'):
+            train_loader.dataset.epoch = epoch
 
         trainer.train(epoch, train_loader, optimizer, recorder)
 

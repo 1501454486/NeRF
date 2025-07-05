@@ -6,6 +6,7 @@ scene: "lego"
 # kilonerf still use nerf's dataset
 train_dataset_module: src.datasets.kilonerf.blender
 test_dataset_module: src.datasets.kilonerf.blender
+dist_dataset_module: src.datasets.kilonerf.blender
 network_module: src.models.kilonerf.network
 renderer_module: src.models.kilonerf.renderer.volume_renderer
 loss_module: src.train.trainers.kilonerf
@@ -116,6 +117,9 @@ test_dataset:
   H: 800
   W: 800
 
+dist_dataset:
+  data_root: "data/lego/distilled"
+
 train:
   single_view: False
   batch_size: 1
@@ -123,6 +127,7 @@ train:
   weight_decay: 0.
   ep_dist: 300      # 150k iters for distillation
   ep_ft: 2000       # 1000k iters for fine-tuning
+  epoch: 2300
   optim: 'adam'
   scheduler:
     type: "exponential"
