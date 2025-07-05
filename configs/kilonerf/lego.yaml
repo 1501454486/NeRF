@@ -112,7 +112,7 @@ val_dataset:
 test_dataset:
   data_root: "data/lego"
   split: "test"
-  input_ratio: 0.5
+  input_ratio: 1
   cams: [0, -1,1]
   H: 800
   W: 800
