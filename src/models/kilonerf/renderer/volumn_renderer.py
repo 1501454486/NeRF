@@ -28,13 +28,7 @@ class VolumnRenderer(nn.Module):
         device = rays_o.device
 
         # 1. Use Sampler to get initial z_vals, Sampler.forward will return z_vals(N_rays, N_samples), which represent all the potential sample regions
-        ################## DEBUG #######################
-        print("Sample begin...")
-        ################## DEBUG #######################
         _, z_vals = self.sampler(batch, is_training)
-        ################## DEBUG #######################
-        print("Sample end")
-        ################## DEBUG #######################
 
         # 2. Initialize color, depth and T accumulation
         C_acc = torch.zeros((N_rays, 3), device = device)
@@ -46,10 +40,6 @@ class VolumnRenderer(nn.Module):
 
         # 3. begin ray marching loop
         # shape of z_vals is (N_rays, N_samples), march in the sample dimension
-        ################## DEBUG #######################
-        print("shape of z_vals: ", z_vals.shape)
-        print("chunk_size: ", self.chunk_size)
-        ################## DEBUG #######################
         for i in range(0, z_vals.shape[1] - 1, self.chunk_size):
             # if all rays have terminated
             if not active_rays_mask.any():
@@ -61,9 +51,6 @@ class VolumnRenderer(nn.Module):
                 continue
             
             # a. only sample for active rays
-            ################## DEBUG #######################
-            print("Part a begins...")
-            ################## DEBUG #######################
             active_o = rays_o[active_rays_mask]
             active_v = viewdirs[active_rays_mask]
             z_start = z_vals[active_rays_mask, start_idx : end_idx]
@@ -74,13 +61,7 @@ class VolumnRenderer(nn.Module):
             delta = (z_end - z_start).unsqueeze(-1)
             # shape: (N_active_rays, N_chunk_samples, 3)
             pts_chunk = active_o.unsqueeze(1) + active_v.unsqueeze(1) * t_mid.unsqueeze(-1)
-            ################## DEBUG #######################
-            print("Part a ends")
-            ################## DEBUG #######################
 
-            ################## DEBUG #######################
-            print("Part b begins...")
-            ################## DEBUG #######################
             # b. query network in batch
             # FIXME: slow!!
             # shape of pts_chunk: (N_rays, renderer_chunk_size, 3)
@@ -91,14 +72,6 @@ class VolumnRenderer(nn.Module):
             if self.raw_noise_std > 0 and is_training:
                 density_chunk = self.add_noise(density_chunk)
 
-            ################## DEBUG #######################
-            print("Part a ends")
-            ################## DEBUG #######################
-
-
-            ################## DEBUG #######################
-            print("Part c begins...")
-            ################## DEBUG #######################
             # c. render in a single step
             sigma_chunk = torch.relu(density_chunk)
             T_step_chunk = torch.exp(-sigma_chunk * delta)
@@ -120,13 +93,7 @@ class VolumnRenderer(nn.Module):
             D_acc[active_rays_mask] += depth_map_chunk
             A_acc[active_rays_mask] += alpha_map_chunk
             T_acc[active_rays_mask] *= torch.prod(T_step_chunk, dim = 1)
-            ################## DEBUG #######################
-            print("Part c ends")
-            ################## DEBUG #######################
 
-            ################## DEBUG #######################
-            print("Part d begins...")
-            ################## DEBUG #######################
             # d/e. Early Ray Termination
             terminated_mask_in_active = T_acc[active_rays_mask] < self.ert_threshold
             current_active_indices = torch.where(active_rays_mask)[0]
@@ -134,10 +101,6 @@ class VolumnRenderer(nn.Module):
 
             if rays_to_terminate_indices.numel() > 0:
                 active_rays_mask[rays_to_terminate_indices] = False
-
-            ################## DEBUG #######################
-            print(f"iteration {i} end:")
-            ################## DEBUG #######################
 
         if self.white_bkgd > 0:
             C_acc += T_acc
