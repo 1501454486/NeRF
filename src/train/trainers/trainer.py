@@ -5,6 +5,7 @@ import tqdm
 from torch.nn.parallel import DistributedDataParallel
 from src.config import cfg
 from src.utils.data_utils import to_cuda
+from torch.cuda.amp import autocast, GradScaler
 
 
 class Trainer(object):
@@ -23,6 +24,7 @@ class Trainer(object):
         self.local_rank = cfg.local_rank
         self.device = device
         self.global_step = 0
+        self.scaler = GradScaler()
 
     def reduce_loss_stats(self, loss_stats):
         reduced_losses = {k: torch.mean(v) for k, v in loss_stats.items()}
@@ -54,14 +56,21 @@ class Trainer(object):
             batch['is_training'] = True
             if stage is not None:
                 batch['stage'] = stage
-            output, loss, loss_stats, image_stats = self.network(batch)
+
+            # mixed precision
+            with autocast():
+                output, loss, loss_stats, image_stats = self.network(batch)
 
             # training stage: loss; optimizer; scheduler
             loss = loss.mean()
             optimizer.zero_grad()
-            loss.backward()
+            # loss.backward()
+            self.scaler.scale(loss).backward()
+            self.scaler.unscale_(optimizer)
             torch.nn.utils.clip_grad_value_(self.network.parameters(), 40)
-            optimizer.step()
+            # optimizer.step()
+            self.scaler.step(optimizer)
+            self.scaler.update()
 
             if cfg.local_rank > 0:
                 continue
