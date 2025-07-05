@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 from src.models.kilonerf.renderer.sampler import Sampler
 from src.config import cfg
+import time
 
 
 class VolumnRenderer(nn.Module):
@@ -15,7 +16,7 @@ class VolumnRenderer(nn.Module):
         self.chunk_size = cfg.task_arg.renderer_chunk_size
 
 
-    def forward(self, batch, is_training: bool = True):
+    def forward(self, batch, is_training: bool = True, verbose: bool = False):
         """
         Performs volumn rendering on raw NeRF output
 
@@ -31,10 +32,21 @@ class VolumnRenderer(nn.Module):
         rays_o = rays_o.view(-1, 3)
         viewdirs = viewdirs.view(-1, 3)
 
+        # --- timer ---
+        if verbose is True:
+            torch.cuda.synchronize()
+            time_start = time.time()
+
         # 1. Use Sampler to get initial z_vals, Sampler.forward will return z_vals(batch_size * N_rays, N_samples), which represent all the potential sample regions
         # shape of z_vals: (batch_size * N_rays, N_samples)
         _, z_vals = self.sampler(batch, is_training)
 
+        # --- timer ---
+        if verbose is True:
+            torch.cuda.synchronize()
+            time_sampler_end = time.time()
+        # -------------
+        
         # 2. Initialize color, depth and T accumulation
         C_acc = torch.zeros((total_num_rays, 3), device = device)
         D_acc = torch.zeros((total_num_rays, 1), device = device)
@@ -105,6 +117,17 @@ class VolumnRenderer(nn.Module):
 
             if rays_to_terminate_indices.numel() > 0:
                 active_rays_mask[rays_to_terminate_indices] = False
+
+        # --- timer ---
+        if verbose is True:
+            torch.cuda.synchronize()
+            time_renderer_end = time.time()
+
+            sampler_time = time_sampler_end - time_start
+            renderer_time = time_renderer_end - time_sampler_end
+            print(f"\n[PROFILING] Sampler Time: {sampler_time:.4f}s | Renderer Loop Time: {renderer_time:.4f}s\n")
+        # -------------
+
 
         if self.white_bkgd > 0:
             C_acc += T_acc
