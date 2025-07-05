@@ -95,7 +95,7 @@ def make_data_loader(cfg, is_train=True, is_distributed=False, max_iter=-1):
         collate_fn=collator,
         worker_init_fn=worker_init_fn,
         pin_memory=True,
-        # persistent_workers=True
+        persistent_workers=True
     )
 
     return data_loader

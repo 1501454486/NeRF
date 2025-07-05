@@ -11,6 +11,8 @@ class VolumnRenderer(nn.Module):
         self.net = net
         self.raw_noise_std = cfg.task_arg.raw_noise_std
         self.ert_threshold = cfg.sampler.ert_threshold
+        self.white_bkgd = cfg.task_arg.white_bkgd
+        self.chunk_size = cfg.task_arg.renderer_chunk_size
 
 
     def forward(self, batch, is_training: bool = True):
@@ -26,7 +28,13 @@ class VolumnRenderer(nn.Module):
         device = rays_o.device
 
         # 1. Use Sampler to get initial z_vals, Sampler.forward will return z_vals(N_rays, N_samples), which represent all the potential sample regions
+        ################## DEBUG #######################
+        print("Sample begin...")
+        ################## DEBUG #######################
         _, z_vals = self.sampler(batch, is_training)
+        ################## DEBUG #######################
+        print("Sample end")
+        ################## DEBUG #######################
 
         # 2. Initialize color, depth and T accumulation
         C_acc = torch.zeros((N_rays, 3), device = device)
@@ -38,54 +46,103 @@ class VolumnRenderer(nn.Module):
 
         # 3. begin ray marching loop
         # shape of z_vals is (N_rays, N_samples), march in the sample dimension
-        for i in range(z_vals.shape[1] - 1):
+        ################## DEBUG #######################
+        print("shape of z_vals: ", z_vals.shape)
+        print("chunk_size: ", self.chunk_size)
+        ################## DEBUG #######################
+        for i in range(0, z_vals.shape[1] - 1, self.chunk_size):
             # if all rays have terminated
             if not active_rays_mask.any():
                 break
+
+            start_idx = i
+            end_idx = min(i + self.chunk_size, z_vals.shape[1] - 1)
+            if start_idx >= end_idx:
+                continue
             
             # a. only sample for active rays
-            active_z_vals_start = z_vals[active_rays_mask, i]
-            active_z_vals_end = z_vals[active_rays_mask, i + 1]
+            ################## DEBUG #######################
+            print("Part a begins...")
+            ################## DEBUG #######################
+            active_o = rays_o[active_rays_mask]
+            active_v = viewdirs[active_rays_mask]
+            z_start = z_vals[active_rays_mask, start_idx : end_idx]
+            z_end = z_vals[active_rays_mask, start_idx + 1 : end_idx + 1]
 
             # sample for middle regions
-            t_mid = (active_z_vals_start + active_z_vals_end) * 0.5
-            pts = rays_o[active_rays_mask] + viewdirs[active_rays_mask] * t_mid.unsqueeze(-1)
-            delta = (active_z_vals_end - active_z_vals_start).unsqueeze(-1)
+            t_mid = (z_start + z_end) * 0.5
+            delta = (z_end - z_start).unsqueeze(-1)
+            # shape: (N_active_rays, N_chunk_samples, 3)
+            pts_chunk = active_o.unsqueeze(1) + active_v.unsqueeze(1) * t_mid.unsqueeze(-1)
+            ################## DEBUG #######################
+            print("Part a ends")
+            ################## DEBUG #######################
 
+            ################## DEBUG #######################
+            print("Part b begins...")
+            ################## DEBUG #######################
             # b. query network in batch
-            rgb, density = self.net(pts.unsqueeze(1), viewdirs[active_rays_mask])
-            rgb = rgb.squeeze(1)
-            density = density.squeeze(1)
+            # FIXME: slow!!
+            # shape of pts_chunk: (N_rays, renderer_chunk_size, 3)
+            # shape of active_v: (N_rays, 3)
+            rgb_chunk, density_chunk = self.net(pts_chunk, active_v)
             
             # add Gaussian noise to density if specified and only during trainings
             if self.raw_noise_std > 0 and is_training:
-                density = add_noise(density)
+                density_chunk = self.add_noise(density_chunk)
 
+            ################## DEBUG #######################
+            print("Part a ends")
+            ################## DEBUG #######################
+
+
+            ################## DEBUG #######################
+            print("Part c begins...")
+            ################## DEBUG #######################
             # c. render in a single step
-            sigma = torch.relu(density)
-            T_step = torch.exp(-sigma * delta)
-            alpha = 1.0 - T_step
+            sigma_chunk = torch.relu(density_chunk)
+            T_step_chunk = torch.exp(-sigma_chunk * delta)
+            alpha_chunk = 1.0 - T_step_chunk
 
-            weight = T_acc[active_rays_mask] * alpha
+            incoming_T = T_acc[active_rays_mask].unsqueeze(1)
+            T_acc_in_chunk = torch.cumprod(
+                torch.cat([incoming_T, T_step_chunk], dim = 1), dim = 1
+            )[:, :-1, :]
+
+            weights_chunk = T_acc_in_chunk * alpha_chunk
+
+            rgb_map_chunk = torch.sum(weights_chunk * torch.sigmoid(rgb_chunk), dim = 1)
+            depth_map_chunk = torch.sum(weights_chunk.squeeze(-1) * t_mid, dim = 1).unsqueeze(-1)
+            alpha_map_chunk = torch.sum(weights_chunk, dim = 1)
 
             # update color and occupancy
-            C_acc[active_rays_mask] += weight * torch.sigmoid(rgb)
-            D_acc[active_rays_mask] += weight * t_mid.unsqueeze(-1)
-            T_acc[active_rays_mask] *= T_step
-            A_acc[active_rays_mask] += weight
+            C_acc[active_rays_mask] += rgb_map_chunk
+            D_acc[active_rays_mask] += depth_map_chunk
+            A_acc[active_rays_mask] += alpha_map_chunk
+            T_acc[active_rays_mask] *= torch.prod(T_step_chunk, dim = 1)
+            ################## DEBUG #######################
+            print("Part c ends")
+            ################## DEBUG #######################
 
-            # d/e. check if terminated and compression
+            ################## DEBUG #######################
+            print("Part d begins...")
+            ################## DEBUG #######################
+            # d/e. Early Ray Termination
+            terminated_mask_in_active = T_acc[active_rays_mask] < self.ert_threshold
             current_active_indices = torch.where(active_rays_mask)[0]
-            terminated_mask = T_acc[active_rays_mask] < self.ert_threshold
+            rays_to_terminate_indices = current_active_indices[terminated_mask_in_active.squeeze(-1)]
 
-            if terminated_mask.any():
-                active_rays_mask[current_active_indices[terminated_mask.squeeze(-1)]] = False
+            if rays_to_terminate_indices.numel() > 0:
+                active_rays_mask[rays_to_terminate_indices] = False
+
+            ################## DEBUG #######################
+            print(f"iteration {i} end:")
+            ################## DEBUG #######################
 
         if self.white_bkgd > 0:
             C_acc += T_acc
 
         D_acc = D_acc + T_acc * self.sampler.far
-        
         image = {}
         image['rgb_map'] = C_acc
         image['depth_map'] = D_acc

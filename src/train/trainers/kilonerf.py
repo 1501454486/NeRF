@@ -66,11 +66,12 @@ class NetworkWrapper(nn.Module):
             gt_rgb = batch['gt_rgb']
             loss = nn.functional.mse_loss(gt_rgb, student_rgb)
             loss_stats.update(loss_finetune_mse = loss)
+            image_stats.update(rgb_map = student_rgb, gt_rgb = gt_rgb)
         else:
             # validation or test, only forward
             loss = torch.tensor(0.0, device = student_rgb.device)
+            image_stats.update(rgb_map = student_rgb, teacher_rgb = teacher_rgb)
 
         loss_stats.update(loss = loss)
-        image_stats.update(rgb_map = student_rgb, gt_rgb = gt_rgb)
 
         return student_image, loss, loss_stats, image_stats

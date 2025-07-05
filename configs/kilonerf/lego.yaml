@@ -4,8 +4,8 @@ exp_name: "kilonerf"
 scene: "lego"
 
 # kilonerf still use nerf's dataset
-train_dataset_module: src.datasets.nerf.blender
-test_dataset_module: src.datasets.nerf.blender
+train_dataset_module: src.datasets.kilonerf.blender
+test_dataset_module: src.datasets.kilonerf.blender
 network_module: src.models.kilonerf.network
 renderer_module: src.models.kilonerf.renderer.volume_renderer
 loss_module: src.train.trainers.kilonerf
@@ -23,8 +23,9 @@ teacher:
 write_video: True
 
 task_arg:  
-  N_rays: 8192 # number of rays in each batch
+  N_rays: 1024 # number of rays in each batch
   chunk_size: 8192 # number of points processed in parallel
+  renderer_chunk_size: 128  # number of points in each ray, during rendering
   white_bkgd: 1 # use white background
   N_samples: 64 # number of samples per ray in coarse network
   N_importance: 128 # number of samples per ray in fine network
@@ -127,7 +128,7 @@ train:
     type: "exponential"
     gamma: 0.1
     decay_epochs: 500 # original 1000
-  num_workers: 0
+  num_workers: 8
 
 test:
   batch_size: 1
