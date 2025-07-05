@@ -171,9 +171,8 @@ class Sampler(nn.Module):
         viewdirs = viewdirs.view(-1, 3)
         
         # 1. Find ray-AABB intersection to get initial near and far bounds
-        N_rays = rays_o.shape[0]
-        near = torch.full((N_rays, ), self.near, device = self.device, dtype = torch.float32)
-        far = torch.full((N_rays, ), self.far, device = self.device, dtype = torch.float32)
+        near = torch.full((batch_size * N_rays, ), self.near, device = self.device, dtype = torch.float32)
+        far = torch.full((batch_size * N_rays, ), self.far, device = self.device, dtype = torch.float32)
 
         # 2. Use ray matching to skip empty space (ESS)
         with torch.no_grad():
