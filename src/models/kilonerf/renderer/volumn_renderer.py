@@ -19,31 +19,32 @@ class VolumnRenderer(nn.Module):
         """
         Performs volumn rendering on raw NeRF output
 
-        @param batch: (N_rays, N_samples, 4) raw output from the model (rgb, density)
+        @param batch: (batch_size, N_rays, N_samples, 4) raw output from the model (rgb, density)
         @return: Dictionary with rendered RGB values and depth values
         """
         # shape: (batch_size, N_rays, 3)
         rays_o, viewdirs = batch['xyz'], batch['viewdirs']
         batch_size, N_rays, _ = rays_o.shape
+        total_num_rays = batch_size * N_rays
         device = rays_o.device
         # flatten a batch
         rays_o = rays_o.view(-1, 3)
         viewdirs = viewdirs.view(-1, 3)
 
-        # 1. Use Sampler to get initial z_vals, Sampler.forward will return z_vals(N_rays, N_samples), which represent all the potential sample regions
-        # shape of z_vals: (B * N_rays, N_samples)
+        # 1. Use Sampler to get initial z_vals, Sampler.forward will return z_vals(batch_size * N_rays, N_samples), which represent all the potential sample regions
+        # shape of z_vals: (batch_size * N_rays, N_samples)
         _, z_vals = self.sampler(batch, is_training)
 
         # 2. Initialize color, depth and T accumulation
-        C_acc = torch.zeros((N_rays, 3), device = device)
-        D_acc = torch.zeros((N_rays, 1), device = device)
-        T_acc = torch.ones((N_rays, 1), device = device)
-        A_acc = torch.zeros((N_rays, 1), device = device)
+        C_acc = torch.zeros((total_num_rays, 3), device = device)
+        D_acc = torch.zeros((total_num_rays, 1), device = device)
+        T_acc = torch.ones((total_num_rays, 1), device = device)
+        A_acc = torch.zeros((total_num_rays, 1), device = device)
 
-        active_rays_mask = torch.ones(N_rays, dtype = torch.bool, device = device)
+        active_rays_mask = torch.ones(total_num_rays, dtype = torch.bool, device = device)
 
         # 3. begin ray marching loop
-        # shape of z_vals is (B * N_rays, N_samples), march in the sample dimension
+        # shape of z_vals is (batch_size * N_rays, N_samples), march in the sample dimension
         for i in range(0, z_vals.shape[1] - 1, self.chunk_size):
             # if all rays have terminated
             if not active_rays_mask.any():
@@ -67,9 +68,8 @@ class VolumnRenderer(nn.Module):
             pts_chunk = active_o.unsqueeze(1) + active_v.unsqueeze(1) * t_mid.unsqueeze(-1)
 
             # b. query network in batch
-            # FIXME: slow!!
-            # shape of pts_chunk: (N_rays, renderer_chunk_size, 3)
-            # shape of active_v: (N_rays, 3)
+            # shape of pts_chunk: (batch_size * N_rays, renderer_chunk_size, 3)
+            # shape of active_v: (batch_size * N_rays, 3)
             rgb_chunk, density_chunk = self.net(pts_chunk, active_v)
             
             # add Gaussian noise to density if specified and only during trainings
