@@ -13,9 +13,7 @@ class Sampler(nn.Module):
     """
     def __init__(self):
         super().__init__()
-        self.teacher_model = make_network(cfg).cuda()
-        load_network(self.teacher_model, cfg.teacher_model_dir)
-        self.device = self.teacher_model.device
+        self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         self.result_dir = cfg.result_dir
         self.aabb = cfg.task_arg.aabb
         self.chunk = cfg.task_arg.chunk_size
@@ -69,8 +67,10 @@ class Sampler(nn.Module):
         Use a teacher model (NeRF) to evaluate and generate grid.
         This process will traverse all the grids, and in each grid, it will generate sub_grid^3 to evaluate whether this grid is occupird or not.
         """
+        teacher_model = make_network(cfg).cuda()
+        load_network(teacher_model, cfg.teacher_model_dir)
         if verbose is True:
-            print("teacher model: ", self.teacher_model)
+            print("teacher model: ", teacher_model)
         # initialize a bool grid with all False
         self.occ_grid = torch.zeros(self.occ_grid_resolution, dtype = torch.bool, device = self.device)
 
@@ -126,7 +126,7 @@ class Sampler(nn.Module):
             dummy_viewdirs = torch.zeros(1, 3, device = self.device)
 
             # shape: (1, N, 4)
-            raw_output = self.teacher_model(inputs, dummy_viewdirs, "fine")
+            raw_output = teacher_model(inputs, dummy_viewdirs, "fine")
 
             if verbose is True:
                 print("shape of raw_output: ", raw_output.shape)
