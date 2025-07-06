@@ -73,6 +73,8 @@ class VolumnRenderer(nn.Module):
         # 检查张量是否在内存中连续，这对于一些CUDA操作很重要
         print(f"Is rays_o_flat contiguous? {rays_o_flat.is_contiguous()}")
         print(f"Is viewdirs_flat contiguous? {viewdirs_flat.is_contiguous()}")
+
+        print(f"Scene AABB value: {self.scene_aabb}")
         print("--------------------------\n\n")
         # ====================== DEBUG CODE END ======================
 
