@@ -1,10 +1,11 @@
 import torch
 import torch.nn as nn
-from src.models.kilonerf.renderer.sampler import Sampler
+# from src.models.kilonerf.renderer.sampler import Sampler
 from src.config import cfg
 import time
 import nerfacc
 import os
+from tqdm import tqdm
 
 
 class VolumnRenderer(nn.Module):
@@ -13,24 +14,25 @@ class VolumnRenderer(nn.Module):
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         # self.sampler = Sampler()
         self.net = net
-        # self.raw_noise_std = cfg.task_arg.raw_noise_std
-        # self.ert_threshold = cfg.sampler.ert_threshold
         self.white_bkgd = cfg.task_arg.white_bkgd
-        # self.chunk_size = cfg.task_arg.renderer_chunk_size
 
         self.occ_threshold = cfg.sampler.occ_threshold
         self.result_dir = cfg.result_dir
         grid_resolution = cfg.task_arg.grid_resolution
         occ_factor = cfg.sampler.occ_factor
         self.occ_grid_resolution = [grid * occ_factor for grid in grid_resolution] # e.g., [256, 256, 256]
+        self.scene_aabb = torch.tensor(cfg.task_arg.aabb['min'] + cfg.task_arg.aabb['max'], dtype=torch.float32, device=self.device)
+        self.register_buffer('aabb_min', torch.tensor(self.aabb['min'], device = self.device))
+        self.register_buffer('aabb_max', torch.tensor(self.aabb['max'], device = self.device))
+        self.register_buffer('occ_grid_resolution_tensor', torch.tensor(self.occ_grid_resolution, device = self.device))
+
         # grid path
         res_str = f"{self.occ_grid_resolution[0]}_{self.occ_grid_resolution[1]}_{self.occ_grid_resolution[2]}"
         self.grid_path = os.path.join(self.result_dir, f'occ_grid_res{res_str}_thresh{self.occ_threshold}.pth')
-
-        self.scene_aabb = torch.tensor(cfg.task_arg.aabb['min'] + cfg.task_arg.aabb['max'], dtype=torch.float32, device=self.device)
-
-        self._load_grid()
-        if self.occ_grid is None:
+        self.occ_grid = None
+        if os.path.exists(self.grid_path):
+            self._load_grid()
+        else:
             self._evaluate_grid()
             self._save_grid()
         
@@ -42,6 +44,7 @@ class VolumnRenderer(nn.Module):
 
         self.estimator.binaries = self.occ_grid.flatten()
         self.render_step_size = cfg.sampler.render_step_size
+        self.early_stop_eps = cfg.sampler.ert_threshold
 
 
     def forward(self, batch, is_training: bool = True):
@@ -50,28 +53,31 @@ class VolumnRenderer(nn.Module):
         rays_o_flat, viewdirs_flat = rays_o.view(-1, 3), viewdirs.view(-1, 3)
         num_total_rays = batch_size * N_rays
 
+        # Perform sampling with ESS
+        ray_indices, t_starts, t_ends = self.estimator.sampling(
+            rays_o = rays_o_flat,
+            rays_d = viewdirs_flat,
+            render_step_size = self.render_step_size,
+            early_stop_eps = self.early_stop_eps,
+        )
+
         # define callback function
         def rgb_alpha_fn(t_starts, t_ends, ray_indices):
             t_mid = (t_start + t_ends) / 2.0
             pts = rays_o_flat[ray_indices] + viewdirs_flat[ray_indices] * t_mid.unsqueeze(-1)
-
             # query network
             rgb_chunk, density_chunk = self.net(pts.unsqueeze(1), viewdirs_flat[ray_indices])
-
             # calculate alpha
             delta = (t_ends - t_starts).unsqueeze(-1)
             alpha = 1.0 - torch.exp(-torch.relu(density_chunk) * delta)
-
             return torch.cat([torch.sigmoid(rgb_chunk), alpha], dim = -1)
 
         # call rendering function of nerfacc
-        colors, opacities, depths, _ = nerfacc.rendering(
-            rays_o = rays_o_flat,
-            rays_d = viewdirs_flat,
-            scene_aabb = self.scene_aabb,
-            estimator = self.estimator,
+        colors, opacities, depths, extras = nerfacc.rendering(
+            t_starts = t_starts,
+            t_ends = t_ends,
+            ray_indices = ray_indices,
             rgb_alpha_fn = rgb_alpha_fn,
-            render_step_size = self.render_step_size
         )
 
         # deal with background
@@ -80,7 +86,7 @@ class VolumnRenderer(nn.Module):
         image = {
             'rgb_map': colors.view(batch_size, N_rays, 3),
             'depth_map': depths.view(batch_size, N_rays, 1),
-            'alpha_map': opacities.view(batch_size, N_rays, 1)
+            'alpha_map': extras['alphas'].view(batch_size, N_rays, 1)
         }
         return image
 
