@@ -63,7 +63,7 @@ class VolumnRenderer(nn.Module):
 
         # define callback function
         def rgb_alpha_fn(t_starts, t_ends, ray_indices):
-            t_mid = (t_start + t_ends) / 2.0
+            t_mid = (t_starts + t_ends) / 2.0
             pts = rays_o_flat[ray_indices] + viewdirs_flat[ray_indices] * t_mid.unsqueeze(-1)
             # query network
             rgb_chunk, density_chunk = self.net(pts.unsqueeze(1), viewdirs_flat[ray_indices])
