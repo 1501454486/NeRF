@@ -53,6 +53,29 @@ class VolumnRenderer(nn.Module):
         rays_o_flat, viewdirs_flat = rays_o.view(-1, 3), viewdirs.view(-1, 3)
         num_total_rays = batch_size * N_rays
 
+        # ===================== DEBUG CODE START =====================
+        print("\n\n--- NERFACC DEBUG INFO ---")
+        # 检查 estimator 对象本身及其关键属性
+        print(f"Estimator object: {self.estimator}")
+        if hasattr(self.estimator, 'roi_aabb'):
+            print(f"ROI AABB shape: {self.estimator.roi_aabb.shape}, dtype: {self.estimator.roi_aabb.dtype}")
+            print(f"ROI AABB value: {self.estimator.roi_aabb}")
+        if hasattr(self.estimator, 'resolution'):
+            print(f"Resolution value: {self.estimator.resolution}, type: {type(self.estimator.resolution)}")
+        if hasattr(self.estimator, 'binaries'):
+            print(f"Binaries shape: {self.estimator.binaries.shape}, dtype: {self.estimator.binaries.dtype}")
+            print(f"Binaries num elements: {self.estimator.binaries.numel()}")
+
+        # 检查传入的光线数据
+        print(f"Rays_o_flat shape: {rays_o_flat.shape}, dtype: {rays_o_flat.dtype}")
+        print(f"Viewdirs_flat shape: {viewdirs_flat.shape}, dtype: {viewdirs_flat.dtype}")
+
+        # 检查张量是否在内存中连续，这对于一些CUDA操作很重要
+        print(f"Is rays_o_flat contiguous? {rays_o_flat.is_contiguous()}")
+        print(f"Is viewdirs_flat contiguous? {viewdirs_flat.is_contiguous()}")
+        print("--------------------------\n\n")
+        # ====================== DEBUG CODE END ======================
+
         # Perform sampling with ESS
         ray_indices, t_starts, t_ends = self.estimator.sampling(
             rays_o = rays_o_flat,
