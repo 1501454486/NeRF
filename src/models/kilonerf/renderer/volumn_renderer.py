@@ -16,7 +16,12 @@ class VolumnRenderer(nn.Module):
         # self.ert_threshold = cfg.sampler.ert_threshold
         self.white_bkgd = cfg.task_arg.white_bkgd
         # self.chunk_size = cfg.task_arg.renderer_chunk_size
-
+        
+        self.occ_threshold = cfg.sampler.occ_threshold
+        self.result_dir = cfg.result_dir
+        grid_resolution = cfg.task_arg.grid_resolution
+        occ_factor = cfg.sampler.occ_factor
+        self.occ_grid_resolution = [grid * occ_factor for grid in grid_resolution] # e.g., [256, 256, 256]
         # grid path
         res_str = f"{self.occ_grid_resolution[0]}_{self.occ_grid_resolution[1]}_{self.occ_grid_resolution[2]}"
         self.grid_path = os.path.join(self.result_dir, f'occ_grid_res{res_str}_thresh{self.occ_threshold}.pth')
