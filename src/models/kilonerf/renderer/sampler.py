@@ -168,7 +168,7 @@ class Sampler(nn.Module):
         def occ_eval_fn(x):
             return torch.ones(x.shape[:-1], device = x.device) * -1e6
 
-        ray_indices, t_starts, t_ends = nerfacc.ray_matching(
+        ray_indices, t_starts, t_ends = nerfacc.marching(
             rays_o = rays_o,
             rays_d = rays_d,
             scene_aabb = self.estimator.roi_aabb,
