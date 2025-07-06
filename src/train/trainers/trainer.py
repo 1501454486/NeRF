@@ -97,7 +97,7 @@ class Trainer(object):
                 recorder.update_image_stats(image_stats)
                 recorder.record("train")
 
-    def val(self, epoch, data_loader, evaluator=None, recorder=None):
+    def val(self, epoch, data_loader, evaluator=None, recorder=None, stage = None):
         self.network.eval()
         torch.cuda.empty_cache()
         val_loss_stats = {}
@@ -108,6 +108,8 @@ class Trainer(object):
             batch["step"] = recorder.step
             batch['epoch'] = epoch
             batch['is_training'] = False
+            if stage is not None:
+                batch['stage'] = stage
             with torch.no_grad():
                 output, loss, loss_stats, _ = self.network(batch)
                 if evaluator is not None:

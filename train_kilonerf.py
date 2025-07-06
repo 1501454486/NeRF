@@ -107,7 +107,7 @@ def train(cfg, network):
             )
 
         if (epoch + 1) % cfg.eval_ep == 0 and cfg.local_rank == 0:
-            trainer.val(epoch, val_loader, evaluator, recorder)
+            trainer.val(epoch, val_loader, evaluator, recorder, stage)
 
     return network
 
