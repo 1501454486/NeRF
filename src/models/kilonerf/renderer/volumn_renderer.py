@@ -241,8 +241,8 @@ class VolumnRenderer(nn.Module):
         """
         Load grid from disk
         """
-        self.occ_grid = torch.load(self.grid_path, map_location = self.device)
-        print(f"Occupancy grid loaded from {self.grid_path}")
+        self.occ_grid = torch.load(self.grid_path, map_location = self.device).squeeze(0)
+        print(f"Occupancy grid loaded from {self.grid_path}. shape: ", self.occ_grid.shape)
 
 
     @torch.no_grad()
