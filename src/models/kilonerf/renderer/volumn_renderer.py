@@ -40,7 +40,7 @@ class VolumnRenderer(nn.Module):
             levels = 1
         ).to(self.device)
 
-        self.estimator.binaries = occ_grid.flatten()
+        self.estimator.binaries = self.occ_grid.flatten()
         self.render_step_size = cfg.sampler.render_step_size
 
 
