@@ -63,6 +63,8 @@ sampler:
   max_points: 192
   near: 2
   far: 6
+  # render step siez for nerfacc
+  render_step_size: 5e-3
 
 
 network:

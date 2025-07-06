@@ -5,6 +5,7 @@ from src.models import make_network
 from src.utils.net_utils import load_network
 from tqdm import tqdm
 import os
+import nerfacc
 
 
 class Sampler(nn.Module):
@@ -42,6 +43,15 @@ class Sampler(nn.Module):
             print("Occupancy grid not found. Evaluating from NeRF...")
             self._evaluate_grid()
             self._save_grid()
+
+        scene_aabb = torch.cat([self.aabb_min, self.aabb_max])
+        self.estimator = nerfacc.OccGridEstimator(
+            roi_aabb = scene_aabb,
+            resolution = self.occ_grid.shape,
+            levels = 1
+        ).to(self.device)
+        self.estimator.binaries = self.occ_grid.flatten()
+        self.render_step_size = cfg.sampler.get('render_step_size', 5e-3)
 
 
     def _save_grid(self):
@@ -154,144 +164,158 @@ class Sampler(nn.Module):
                 print(f"Occupied ratio: {occupied_ratio:.4f}")
 
 
+    def forward(self, rays_o, rays_d):
+        def occ_eval_fn(x):
+            return torch.ones(x.shape[:-1], device = x.device) * -1e6
 
-    def forward(self, batch, is_training: bool = True):
-        """
-        sample points from the given rays, using Eearly Ray Termination (only during inference) and Empty Space Skipping
+        ray_indices, t_starts, t_ends = nerfacc.ray_matching(
+            rays_o = rays_o,
+            rays_d = rays_d,
+            scene_aabb = self.estimator.roi_aabb,
+            estimator = self.estimator,
+            occ_eval_fn = occ_eval_fn,
+            render_step_size = self.render_step_size
+        )
+        return ray_indices, t_starts, t_ends
 
-        @param batch: A batch from dataloader (rays, rgb) (Here we only need rays)
-        @return: sampled pts (N_rays, N_samples, 3)
-        @return: z_vals: sample pts indices (N_rays, N_samples)
-        """
-        # shape: (batch_size, N_rays, 3)
-        rays_o, viewdirs = batch['xyz'], batch['viewdirs']
-        batch_size, N_rays, _ = rays_o.shape
 
-        rays_o = rays_o.view(-1, 3)
-        viewdirs = viewdirs.view(-1, 3)
+    # def forward(self, batch, is_training: bool = True):
+    #     """
+    #     sample points from the given rays, using Eearly Ray Termination (only during inference) and Empty Space Skipping
+
+    #     @param batch: A batch from dataloader (rays, rgb) (Here we only need rays)
+    #     @return: sampled pts (N_rays, N_samples, 3)
+    #     @return: z_vals: sample pts indices (N_rays, N_samples)
+    #     """
+    #     # shape: (batch_size, N_rays, 3)
+    #     rays_o, viewdirs = batch['xyz'], batch['viewdirs']
+    #     batch_size, N_rays, _ = rays_o.shape
+
+    #     rays_o = rays_o.view(-1, 3)
+    #     viewdirs = viewdirs.view(-1, 3)
         
-        # 1. Find ray-AABB intersection to get initial near and far bounds
-        near = torch.full((batch_size * N_rays, ), self.near, device = self.device, dtype = torch.float32)
-        far = torch.full((batch_size * N_rays, ), self.far, device = self.device, dtype = torch.float32)
+    #     # 1. Find ray-AABB intersection to get initial near and far bounds
+    #     near = torch.full((batch_size * N_rays, ), self.near, device = self.device, dtype = torch.float32)
+    #     far = torch.full((batch_size * N_rays, ), self.far, device = self.device, dtype = torch.float32)
 
-        # 2. Use ray matching to skip empty space (ESS)
-        with torch.no_grad():
-            effective_near = self._ray_match(rays_o, viewdirs, near, far)
+    #     # 2. Use ray matching to skip empty space (ESS)
+    #     with torch.no_grad():
+    #         effective_near = self._ray_match(rays_o, viewdirs, near, far)
 
-        # 3. Generate sample points between the new near and far
-        t_vals = torch.linspace(0., 1., self.max_points, device = self.device)
-        # Stretch t_vals to be between effective_near and far for each ray
-        z_vals = effective_near.unsqueeze(-1) * (1. - t_vals) + far.unsqueeze(-1) * t_vals
+    #     # 3. Generate sample points between the new near and far
+    #     t_vals = torch.linspace(0., 1., self.max_points, device = self.device)
+    #     # Stretch t_vals to be between effective_near and far for each ray
+    #     z_vals = effective_near.unsqueeze(-1) * (1. - t_vals) + far.unsqueeze(-1) * t_vals
 
-        # Stratified sampling for training
-        # If during training and use perturb, add perturbation
-        if is_training and cfg.task_arg.perturb > 0:
-            mids = .5 * (z_vals[..., 1:] + z_vals[..., :-1])
-            upper = torch.cat([mids, z_vals[..., -1:]], -1)
-            lower = torch.cat([z_vals[..., :1], mids], -1)
-            t_rand = torch.rand(z_vals.shape, device=self.device)
-            z_vals = lower + (upper - lower) * t_rand
+    #     # Stratified sampling for training
+    #     # If during training and use perturb, add perturbation
+    #     if is_training and cfg.task_arg.perturb > 0:
+    #         mids = .5 * (z_vals[..., 1:] + z_vals[..., :-1])
+    #         upper = torch.cat([mids, z_vals[..., -1:]], -1)
+    #         lower = torch.cat([z_vals[..., :1], mids], -1)
+    #         t_rand = torch.rand(z_vals.shape, device=self.device)
+    #         z_vals = lower + (upper - lower) * t_rand
 
-        # Calculate smaple point coordinates
-        # (N_rays, max_points, 3)
-        pts = rays_o.unsqueeze(1) + viewdirs.unsqueeze(1) * z_vals.unsqueeze(-1)
+    #     # Calculate smaple point coordinates
+    #     # (N_rays, max_points, 3)
+    #     pts = rays_o.unsqueeze(1) + viewdirs.unsqueeze(1) * z_vals.unsqueeze(-1)
 
-        N_samples = pts.shape[1]
-        # z_vals: (B * N_rays, N_samples), we won't change them
+    #     N_samples = pts.shape[1]
+    #     # z_vals: (B * N_rays, N_samples), we won't change them
 
-        # pts: (B * N_rays, N_samples, 3) -> (B, N_rays, N_samples, 3)
-        pts = pts.view(batch_size, N_rays, N_samples, 3)
+    #     # pts: (B * N_rays, N_samples, 3) -> (B, N_rays, N_samples, 3)
+    #     pts = pts.view(batch_size, N_rays, N_samples, 3)
 
-        return pts, z_vals
+    #     return pts, z_vals
 
 
-    @torch.no_grad()
-    def _ray_match(self, rays_o, rays_d, near, far):
-        """
-        Perform ray matching to find the intersection with an occupied cell.
-        This implements Empty Space Skipping (ESS).
-        @param rays_o: (N, 3) ray origins.
-        @param rays_d: (N, 3) ray directions.
-        @param near: (N, ) near plane for each ray.
-        @param far: (N, ) far plane for each ray.
-        @return: (N, ) new near plane for each ray after skipping empty space.
-        """
-        cell_diag_length = torch.norm((self.aabb_max - self.aabb_min) / self.occ_grid_resolution_tensor)
-        step_size = cell_diag_length * 0.5  # march with half a cell diagonal
+    # @torch.no_grad()
+    # def _ray_match(self, rays_o, rays_d, near, far):
+    #     """
+    #     Perform ray matching to find the intersection with an occupied cell.
+    #     This implements Empty Space Skipping (ESS).
+    #     @param rays_o: (N, 3) ray origins.
+    #     @param rays_d: (N, 3) ray directions.
+    #     @param near: (N, ) near plane for each ray.
+    #     @param far: (N, ) far plane for each ray.
+    #     @return: (N, ) new near plane for each ray after skipping empty space.
+    #     """
+    #     cell_diag_length = torch.norm((self.aabb_max - self.aabb_min) / self.occ_grid_resolution_tensor)
+    #     step_size = cell_diag_length * 0.5  # march with half a cell diagonal
 
-        t = near.clone()
-        new_near = near.clone()
+    #     t = near.clone()
+    #     new_near = near.clone()
 
-        active_rays_mask = torch.ones_like(near, dtype=torch.bool)
+    #     active_rays_mask = torch.ones_like(near, dtype=torch.bool)
 
-        # March until all rays hit something or exceeded their far plane
-        while active_rays_mask.any():
-            # 1. Calculate the t for the NEXT step for all currently active rays
-            t_next = t[active_rays_mask] + step_size
+    #     # March until all rays hit something or exceeded their far plane
+    #     while active_rays_mask.any():
+    #         # 1. Calculate the t for the NEXT step for all currently active rays
+    #         t_next = t[active_rays_mask] + step_size
 
-            # 2. Check for hits using the next step's position
-            current_points = rays_o[active_rays_mask] + rays_d[active_rays_mask] * t_next.unsqueeze(-1)
-            indices = self._get_index(current_points)
+    #         # 2. Check for hits using the next step's position
+    #         current_points = rays_o[active_rays_mask] + rays_d[active_rays_mask] * t_next.unsqueeze(-1)
+    #         indices = self._get_index(current_points)
 
-            # Create default masks for the active set
-            valid_mask = (indices >= 0).all(dim=-1) & (indices < self.occ_grid_resolution_tensor).all(dim=-1)
-            hit_mask = torch.zeros(active_rays_mask.sum(), dtype=torch.bool, device=self.device)
+    #         # Create default masks for the active set
+    #         valid_mask = (indices >= 0).all(dim=-1) & (indices < self.occ_grid_resolution_tensor).all(dim=-1)
+    #         hit_mask = torch.zeros(active_rays_mask.sum(), dtype=torch.bool, device=self.device)
 
-            # If any points are in valid grid cells, check their occupancy
-            if valid_mask.any():
-                valid_indices = indices[valid_mask]
-                # Get occupancy and place it into the hit_mask at the correct positions
-                hit_mask[valid_mask] = self.occ_grid[valid_indices[:, 0], valid_indices[:, 1], valid_indices[:, 2]]
+    #         # If any points are in valid grid cells, check their occupancy
+    #         if valid_mask.any():
+    #             valid_indices = indices[valid_mask]
+    #             # Get occupancy and place it into the hit_mask at the correct positions
+    #             hit_mask[valid_mask] = self.occ_grid[valid_indices[:, 0], valid_indices[:, 1], valid_indices[:, 2]]
 
-            # 3. For rays that are past the far plane, they are considered misses for this step
-            #    Their new_near will be set to far, and they will be deactivated.
-            past_far_mask = t_next > far[active_rays_mask]
+    #         # 3. For rays that are past the far plane, they are considered misses for this step
+    #         #    Their new_near will be set to far, and they will be deactivated.
+    #         past_far_mask = t_next > far[active_rays_mask]
             
-            # A ray is a "miss" in this step if it's past far OR it didn't hit anything
-            # But we only deactivate it if it's past far. Hits are handled next.
-            miss_and_past_far = past_far_mask & ~hit_mask
+    #         # A ray is a "miss" in this step if it's past far OR it didn't hit anything
+    #         # But we only deactivate it if it's past far. Hits are handled next.
+    #         miss_and_past_far = past_far_mask & ~hit_mask
             
-            # Get global indices for updating the main tensors
-            active_indices = torch.where(active_rays_mask)[0]
+    #         # Get global indices for updating the main tensors
+    #         active_indices = torch.where(active_rays_mask)[0]
 
-            # 4. Handle hits: Update new_near and deactivate the ray
-            if hit_mask.any():
-                hit_indices_in_active = torch.where(hit_mask)[0]
-                global_hit_indices = active_indices[hit_indices_in_active]
+    #         # 4. Handle hits: Update new_near and deactivate the ray
+    #         if hit_mask.any():
+    #             hit_indices_in_active = torch.where(hit_mask)[0]
+    #             global_hit_indices = active_indices[hit_indices_in_active]
                 
-                # IMPORTANT: The new_near is the hit distance, but capped at 'far'
-                new_near[global_hit_indices] = torch.min(t_next[hit_indices_in_active], far[global_hit_indices])
-                active_rays_mask[global_hit_indices] = False
+    #             # IMPORTANT: The new_near is the hit distance, but capped at 'far'
+    #             new_near[global_hit_indices] = torch.min(t_next[hit_indices_in_active], far[global_hit_indices])
+    #             active_rays_mask[global_hit_indices] = False
 
-            # 5. Handle rays that passed 'far' without hitting: Update new_near to 'far' and deactivate
-            if miss_and_past_far.any():
-                miss_indices_in_active = torch.where(miss_and_past_far)[0]
-                global_miss_indices = active_indices[miss_indices_in_active]
+    #         # 5. Handle rays that passed 'far' without hitting: Update new_near to 'far' and deactivate
+    #         if miss_and_past_far.any():
+    #             miss_indices_in_active = torch.where(miss_and_past_far)[0]
+    #             global_miss_indices = active_indices[miss_indices_in_active]
 
-                new_near[global_miss_indices] = far[global_miss_indices]
-                active_rays_mask[global_miss_indices] = False
+    #             new_near[global_miss_indices] = far[global_miss_indices]
+    #             active_rays_mask[global_miss_indices] = False
             
-            # 6. Update t for the next iteration for rays that are still active.
-            # We must only update the 't' values for rays that are continuing the march.
-            # A direct assignment like `t[active_rays_mask] = t_next[...]` is risky because
-            # the number of elements on the left and right may mismatch after deactivation in steps 4 & 5.
+    #         # 6. Update t for the next iteration for rays that are still active.
+    #         # We must only update the 't' values for rays that are continuing the march.
+    #         # A direct assignment like `t[active_rays_mask] = t_next[...]` is risky because
+    #         # the number of elements on the left and right may mismatch after deactivation in steps 4 & 5.
             
-            # Identify which of the currently active rays (from the start of the loop) will continue.
-            continuing_mask_in_active = ~hit_mask & ~past_far_mask
+    #         # Identify which of the currently active rays (from the start of the loop) will continue.
+    #         continuing_mask_in_active = ~hit_mask & ~past_far_mask
             
-            # If there are any rays to continue...
-            if continuing_mask_in_active.any():
-                # Get the global indices of the rays that are continuing.
-                continuing_global_indices = active_indices[continuing_mask_in_active]
+    #         # If there are any rays to continue...
+    #         if continuing_mask_in_active.any():
+    #             # Get the global indices of the rays that are continuing.
+    #             continuing_global_indices = active_indices[continuing_mask_in_active]
                 
-                # Get the corresponding t_next values for these rays.
-                t_next_for_continuing = t_next[continuing_mask_in_active]
+    #             # Get the corresponding t_next values for these rays.
+    #             t_next_for_continuing = t_next[continuing_mask_in_active]
 
-                # Update the main 't' tensor only at these specific global indices.
-                # This is robust to in-loop deactivations.
-                t[continuing_global_indices] = t_next_for_continuing
+    #             # Update the main 't' tensor only at these specific global indices.
+    #             # This is robust to in-loop deactivations.
+    #             t[continuing_global_indices] = t_next_for_continuing
         
-        return new_near.clamp_max(far)
+    #     return new_near.clamp_max(far)
 
     def _get_index(self, pts) -> torch.Tensor:
         """
