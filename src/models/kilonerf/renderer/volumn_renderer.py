@@ -27,7 +27,7 @@ class VolumnRenderer(nn.Module):
         res_str = f"{self.occ_grid_resolution[0]}_{self.occ_grid_resolution[1]}_{self.occ_grid_resolution[2]}"
         self.grid_path = os.path.join(self.result_dir, f'occ_grid_res{res_str}_thresh{self.occ_threshold}.pth')
 
-        scene_aabb = torch.tensor(cfg.task_arg.aabb['min'] + cfg.task_arg.aabb['max'], dtype=torch.float32, device=self.device)
+        self.scene_aabb = torch.tensor(cfg.task_arg.aabb['min'] + cfg.task_arg.aabb['max'], dtype=torch.float32, device=self.device)
 
         self._load_grid()
         if self.occ_grid is None:
@@ -35,7 +35,7 @@ class VolumnRenderer(nn.Module):
             self._save_grid()
         
         self.estimator = nerfacc.OccGridEstimator(
-            roi_aabb = scene_aabb,
+            roi_aabb = self.scene_aabb,
             resolution = self.occ_grid.shape,
             levels = 1
         ).to(self.device)
@@ -68,7 +68,7 @@ class VolumnRenderer(nn.Module):
         colors, opacities, depths, _ = nerfacc.rendering(
             rays_o = rays_o_flat,
             rays_d = viewdirs_flat,
-            scene_aabb = self.estimator.roi_aabb,
+            scene_aabb = self.scene_aabb,
             estimator = self.estimator,
             rgb_alpha_fn = rgb_alpha_fn,
             render_step_size = self.render_step_size
