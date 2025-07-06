@@ -22,8 +22,8 @@ class VolumnRenderer(nn.Module):
         occ_factor = cfg.sampler.occ_factor
         self.occ_grid_resolution = [grid * occ_factor for grid in grid_resolution] # e.g., [256, 256, 256]
         self.scene_aabb = torch.tensor(cfg.task_arg.aabb['min'] + cfg.task_arg.aabb['max'], dtype=torch.float32, device=self.device)
-        self.register_buffer('aabb_min', torch.tensor(self.aabb['min'], device = self.device))
-        self.register_buffer('aabb_max', torch.tensor(self.aabb['max'], device = self.device))
+        # self.register_buffer('aabb_min', torch.tensor(self.aabb['min'], device = self.device))
+        # self.register_buffer('aabb_max', torch.tensor(self.aabb['max'], device = self.device))
         self.register_buffer('occ_grid_resolution_tensor', torch.tensor(self.occ_grid_resolution, device = self.device))
 
         # grid path
