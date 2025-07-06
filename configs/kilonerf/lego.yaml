@@ -64,7 +64,7 @@ sampler:
   near: 2
   far: 6
   # render step siez for nerfacc
-  render_step_size: 5e-3
+  render_step_size: 0.005
 
 
 network:
