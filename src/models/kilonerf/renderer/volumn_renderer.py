@@ -4,6 +4,7 @@ from src.models.kilonerf.renderer.sampler import Sampler
 from src.config import cfg
 import time
 import nerfacc
+import os
 
 
 class VolumnRenderer(nn.Module):
@@ -16,7 +17,7 @@ class VolumnRenderer(nn.Module):
         # self.ert_threshold = cfg.sampler.ert_threshold
         self.white_bkgd = cfg.task_arg.white_bkgd
         # self.chunk_size = cfg.task_arg.renderer_chunk_size
-        
+
         self.occ_threshold = cfg.sampler.occ_threshold
         self.result_dir = cfg.result_dir
         grid_resolution = cfg.task_arg.grid_resolution
