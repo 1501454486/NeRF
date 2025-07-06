@@ -22,8 +22,8 @@ class VolumnRenderer(nn.Module):
         occ_factor = cfg.sampler.occ_factor
         self.occ_grid_resolution = [grid * occ_factor for grid in grid_resolution] # e.g., [256, 256, 256]
         self.scene_aabb = torch.tensor(cfg.task_arg.aabb['min'] + cfg.task_arg.aabb['max'], dtype=torch.float32, device=self.device)
-        # self.register_buffer('aabb_min', torch.tensor(self.aabb['min'], device = self.device))
-        # self.register_buffer('aabb_max', torch.tensor(self.aabb['max'], device = self.device))
+        self.register_buffer('aabb_min', torch.tensor(cfg.task_arg.aabb['min'], device = self.device))
+        self.register_buffer('aabb_max', torch.tensor(cfg.task_arg.aabb['max'], device = self.device))
         self.register_buffer('occ_grid_resolution_tensor', torch.tensor(self.occ_grid_resolution, device = self.device))
 
         # grid path
@@ -67,16 +67,18 @@ class VolumnRenderer(nn.Module):
             pts = rays_o_flat[ray_indices] + viewdirs_flat[ray_indices] * t_mid.unsqueeze(-1)
             # query network
             rgb_chunk, density_chunk = self.net(pts.unsqueeze(1), viewdirs_flat[ray_indices])
+            rgb_chunk = torch.sigmoid(rgb_chunk)
             # calculate alpha
             delta = (t_ends - t_starts).unsqueeze(-1)
             alpha = 1.0 - torch.exp(-torch.relu(density_chunk) * delta)
-            return torch.cat([torch.sigmoid(rgb_chunk), alpha], dim = -1)
+            return rgb_chunk, alpha.squeeze(-1)
 
         # call rendering function of nerfacc
         colors, opacities, depths, extras = nerfacc.rendering(
             t_starts = t_starts,
             t_ends = t_ends,
             ray_indices = ray_indices,
+            n_rays = N_rays,
             rgb_alpha_fn = rgb_alpha_fn,
         )
 
