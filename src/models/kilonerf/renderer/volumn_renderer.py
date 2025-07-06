@@ -30,7 +30,7 @@ class VolumnRenderer(nn.Module):
         
         self.estimator = nerfacc.OccGridEstimator(
             roi_aabb = scene_aabb,
-            resolution = self.occ_grid.shape
+            resolution = self.occ_grid.shape,
             levels = 1
         ).to(self.device)
 
