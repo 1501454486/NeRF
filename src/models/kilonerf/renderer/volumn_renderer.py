@@ -1,4 +1,5 @@
 import torch
+from torch import Tensor
 import torch.nn as nn
 # from src.models.kilonerf.renderer.sampler import Sampler
 from src.config import cfg
