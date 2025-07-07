@@ -3,7 +3,7 @@ import torch.nn as nn
 # from src.models.kilonerf.renderer.sampler import Sampler
 from src.config import cfg
 import time
-# import nerfacc
+import nerfacc
 import os
 from tqdm import tqdm
 
