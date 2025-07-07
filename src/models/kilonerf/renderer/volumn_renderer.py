@@ -24,7 +24,7 @@ class VolumnRenderer(nn.Module):
         self.scene_aabb = torch.tensor(cfg.task_arg.aabb['min'] + cfg.task_arg.aabb['max'], dtype=torch.float32, device=self.device)
         self.register_buffer('aabb_min', torch.tensor(cfg.task_arg.aabb['min'], device = self.device))
         self.register_buffer('aabb_max', torch.tensor(cfg.task_arg.aabb['max'], device = self.device))
-        # self.register_buffer('occ_grid_resolution_tensor', torch.tensor(self.occ_grid_resolution, device = self.device))
+        self.register_buffer('occ_grid_resolution_tensor', torch.tensor(self.occ_grid_resolution, dtype = torch.float32, device = self.device))
 
         # grid path
         res_str = f"{self.occ_grid_resolution[0]}_{self.occ_grid_resolution[1]}_{self.occ_grid_resolution[2]}"
@@ -131,9 +131,22 @@ class VolumnRenderer(nn.Module):
         """
         Load grid from disk
         """
-        self.occ_grid = torch.load(self.grid_path, map_location = self.device).squeeze(0)
-        print(f"Occupancy grid loaded from {self.grid_path}. shape: ", self.occ_grid.shape)
+        loaded_obj = torch.load(self.grid_path, map_location = self.device)
+        print(f"--- DEBUG: Loaded object from {self.grid_path} ---")
+        print(f"Type of loaded object: {type(loaded_obj)}")
+        if isinstance(loaded_obj, torch.Tensor):
+            print(f"Initial shape of loaded tensor: {loaded_obj.shape}")
+            self.occ_grid = loaded_obj.squeeze(0)
+            print(f"Shape after squeeze(0): {self.occ_grid.shape}")
+        else:
+            # 如果加载的是字典或其他类型，这里会打印出来
+            print(f"Loaded object is not a tensor, content: {loaded_obj}")
+            # 根据实际情况处理，例如: self.occ_grid = loaded_obj['grid'].squeeze(0)
+            # 这里暂时先报错，以便我们知道发生了什么
+            raise TypeError("Loaded occupancy grid is not a tensor!")
+        print("--------------------------------------------------")
 
+        print(f"Occupancy grid loaded from {self.grid_path}. shape: ", self.occ_grid.shape)
 
     @torch.no_grad()
     def _evaluate_grid(self, verbose: bool = False):
