@@ -3,9 +3,10 @@ import torch.nn as nn
 # from src.models.kilonerf.renderer.sampler import Sampler
 from src.config import cfg
 import time
-import nerfacc
+# import nerfacc
 import os
 from tqdm import tqdm
+import kilonerf_cuda
 
 
 class VolumnRenderer(nn.Module):
@@ -78,10 +79,21 @@ class VolumnRenderer(nn.Module):
         print("--------------------------\n\n")
         # ====================== DEBUG CODE END ======================
 
+        def sigma_fn(
+            t_starts: Tensor, t_ends:Tensor, ray_indices: Tensor
+        ) -> Tensor:
+            """ Define how to query density for the estimator."""
+            t_origins = rays_o_flat[ray_indices]  # (n_samples, 3)
+            t_dirs = viewdirs_flat[ray_indices]  # (n_samples, 3)
+            positions = t_origins + t_dirs * (t_starts + t_ends)[:, None] / 2.0
+            _, sigmas = self.net(positions.unsqueeze(1), viewdirs_flat[ray_indices])
+            return torch.relu(sigmas)  # (n_samples,)
+
         # Perform sampling with ESS
         ray_indices, t_starts, t_ends = self.estimator.sampling(
             rays_o = rays_o_flat,
             rays_d = viewdirs_flat,
+            sigma_fn = sigma_fn,
             render_step_size = self.render_step_size,
             early_stop_eps = self.early_stop_eps,
         )
