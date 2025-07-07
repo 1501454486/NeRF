@@ -6,7 +6,6 @@ import time
 # import nerfacc
 import os
 from tqdm import tqdm
-import kilonerf_cuda
 
 
 class VolumnRenderer(nn.Module):
