@@ -37,13 +37,14 @@ class VolumnRenderer(nn.Module):
             self._evaluate_grid()
             self._save_grid()
         
+        # Initialize an estimator for the grid
         self.estimator = nerfacc.OccGridEstimator(
             roi_aabb = self.scene_aabb,
-            resolution = self.occ_grid_resolution[0],
+            resolution = self.occ_grid_resolution,
             levels = 1
         ).to(self.device)
 
-        # FIX
+        # load grid into estimator
         self.estimator.binaries = self.occ_grid.unsqueeze(0)
         self.render_step_size = cfg.sampler.render_step_size
         self.early_stop_eps = cfg.sampler.ert_threshold
@@ -84,6 +85,12 @@ class VolumnRenderer(nn.Module):
             t_starts: Tensor, t_ends:Tensor, ray_indices: Tensor
         ) -> Tensor:
             """ Define how to query density for the estimator."""
+            ############### DEBUG #################
+            print("shape of t_starts: ", t_starts.shape)
+            print("shape of t_ends: ", t_ends.shape)
+            print("shape of ray_indices: ", ray_indices.shape)
+            print("num_total_rays: ", num_total_rays)
+
             t_origins = rays_o_flat[ray_indices]  # (n_samples, 3)
             t_dirs = viewdirs_flat[ray_indices]  # (n_samples, 3)
             positions = t_origins + t_dirs * (t_starts + t_ends)[:, None] / 2.0
