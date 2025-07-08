@@ -232,7 +232,7 @@ class Network(nn.Module):
         """
         # 1. prepare for model inputs
         # if input is batched
-        if pts.ndim > 2:
+        if pts.ndim == 2:
             N_rays, _ = pts.shape
             N_samples = 1
         else:

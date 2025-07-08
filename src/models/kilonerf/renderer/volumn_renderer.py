@@ -10,6 +10,14 @@ from tqdm import tqdm
 
 
 class VolumnRenderer(nn.Module):
+    """
+    Renderer for KiloNeRF.
+
+    Args:
+        net: The net to represent this scene. It will be queried to generate rgb and sigma.
+        white_bkgd: whether to use background or not.
+        occ_thred: threshold of occupancy grid. Grids with sigma < occ_thred is False, which means no occupancy; True otherwise.
+    """
     def __init__(self, net):
         super().__init__()
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -98,7 +106,7 @@ class VolumnRenderer(nn.Module):
             return torch.relu(sigmas.view(-1))  # (n_samples,)
 
         # Perform sampling with ESS
-        # ray_indices: (N_samplesm, )
+        # ray_indices: (N_samples, )
         # t_starts: (N_samples, )
         # t_ends: (N_samples, )
         ray_indices, t_starts, t_ends = self.estimator.sampling(
@@ -112,9 +120,10 @@ class VolumnRenderer(nn.Module):
         # define callback function
         def rgb_alpha_fn(t_starts, t_ends, ray_indices):
             t_mid = (t_starts + t_ends) / 2.0
+            # shape of pts: (N_samples, 3)
             pts = rays_o_flat[ray_indices] + viewdirs_flat[ray_indices] * t_mid.unsqueeze(-1)
             # query network
-            rgb_chunk, density_chunk = self.net(pts.unsqueeze(1), viewdirs_flat[ray_indices])
+            rgb_chunk, density_chunk = self.net(pts, viewdirs_flat[ray_indices])
             # rgb_chunk: (num_points, 1, 3)
             # density_chunk: (num_points, 1, 1)
             rgb_chunk = torch.sigmoid(rgb_chunk.view(-1, 3))
