@@ -284,7 +284,8 @@ class Network(nn.Module):
         embedded_dirs = self.embeddirs_fn(viewdirs_expanded)
         kilonerf_input = torch.cat([embedded_pts, embedded_dirs], dim = -1)
 
-        outputs_flat = self.model(kilonerf_input, flat_indices)
+        # outputs_flat = self.model(kilonerf_input, flat_indices)
+        outputs_flat = self.batchify_batch(self.model, self.chunk)(kilonerf_input, flat_indices)
 
         # 4. process outputs
         # reshape outputs back to original shape
@@ -336,6 +337,25 @@ class Network(nn.Module):
                 [fn(inputs[i : i + chunk]) for i in range(0, inputs.shape[0], chunk)], 0
             )
 
+        return ret
+
+        
+    def batchify_batch(self, fn, chunk):
+        """
+        Batchify function for BatchKiloNeRF, which can deal with multiple inputs.
+        """
+        if chunk is None:
+            return fn
+        
+        def ret(inputs, indices):
+            outputs = []
+            for i in range(0, inputs.shape[0], chunk):
+                chunk_outputs = fn(
+                    inputs[i : i + chunk],
+                    indices[i : i + chunk]
+                )
+                outputs.append(chunk_outputs)
+            return torch.cat(outputs, 0)
         return ret
 
 

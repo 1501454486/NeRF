@@ -25,7 +25,7 @@ write_video: True
 
 task_arg:  
   N_rays: 1024 # number of rays in each batch
-  chunk_size: 8192 # number of points processed in parallel
+  chunk_size: 16384 # number of points processed in parallel
   renderer_chunk_size: 128  # number of points in each ray, during rendering
   white_bkgd: 1 # use white background
   N_samples: 64 # number of samples per ray in coarse network
