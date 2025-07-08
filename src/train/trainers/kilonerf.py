@@ -59,16 +59,11 @@ class NetworkWrapper(nn.Module):
                 loss_stats.update(loss_regularization = loss_reg)
                 loss += loss_reg
 
-        elif stage == 'fine-tuning':
+        else:
             # shape: (B, H, W, 3)
             gt_rgb = batch['gt_rgb']
             loss = nn.functional.mse_loss(gt_rgb.view(-1, 3), student_rgb.view(-1, 3))
-            loss_stats.update(loss_finetune_mse = loss)
             image_stats.update(rgb_map = student_rgb, gt_rgb = gt_rgb)
-        else:
-            # validation or test, only forward
-            loss = torch.tensor(0.0, device = student_rgb.device)
-            image_stats.update(rgb_map = student_rgb, teacher_rgb = teacher_rgb)
 
         loss_stats.update(loss = loss)
 
