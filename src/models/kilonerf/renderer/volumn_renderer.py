@@ -71,11 +71,6 @@ class VolumnRenderer(nn.Module):
             t_starts: Tensor, t_ends:Tensor, ray_indices: Tensor
         ) -> Tensor:
             """ Define how to query density for the estimator."""
-            ############### DEBUG #################
-            print("shape of t_starts: ", t_starts.shape)
-            print("shape of t_ends: ", t_ends.shape)
-            print("shape of ray_indices: ", ray_indices.shape)
-            print("num_total_rays: ", num_total_rays)
 
             t_origins = rays_o_flat[ray_indices]  # (n_samples, 3)
             t_dirs = viewdirs_flat[ray_indices]  # (n_samples, 3)
@@ -114,7 +109,7 @@ class VolumnRenderer(nn.Module):
         # colors: (N_rays, 3)
         # opacities: (N_rays, 1)
         # depths: (N_rays, 1)
-        colors, opacities, depths, extras = nerfacc.rendering(
+        colors, opacities, depths, _ = nerfacc.rendering(
             t_starts = t_starts,
             t_ends = t_ends,
             ray_indices = ray_indices,
@@ -133,7 +128,7 @@ class VolumnRenderer(nn.Module):
         image = {
             'rgb_map': colors.view(batch_size, N_rays, 3),
             'depth_map': depths.view(batch_size, N_rays, 1),
-            'alpha_map': extras['alphas'].view(batch_size, N_rays, 1)
+            'alpha_map': opacities.view(batch_size, N_rays, 1)
         }
         return image
 
