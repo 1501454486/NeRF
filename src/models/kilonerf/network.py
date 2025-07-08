@@ -231,7 +231,12 @@ class Network(nn.Module):
         @return: density of shape (N_rays, N_samples, 1)
         """
         # 1. prepare for model inputs
-        N_rays, N_samples, _ = pts.shape
+        # if input is batched
+        if pts.ndim > 2:
+            N_rays, _ = pts.shape
+            N_samples = 1
+        else:
+            N_rays, N_samples, _ = pts.shape
         # flatten pts
         pts_flat = pts.view(-1, 3)
         # expand viewdirs to match all points

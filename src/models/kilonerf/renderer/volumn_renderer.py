@@ -95,9 +95,12 @@ class VolumnRenderer(nn.Module):
             t_dirs = viewdirs_flat[ray_indices]  # (n_samples, 3)
             positions = t_origins + t_dirs * (t_starts + t_ends)[:, None] / 2.0
             _, sigmas = self.net(positions.unsqueeze(1), viewdirs_flat[ray_indices])
-            return torch.relu(sigmas)  # (n_samples,)
+            return torch.relu(sigmas.view(-1))  # (n_samples,)
 
         # Perform sampling with ESS
+        # ray_indices: (N_samplesm, )
+        # t_starts: (N_samples, )
+        # t_ends: (N_samples, )
         ray_indices, t_starts, t_ends = self.estimator.sampling(
             rays_o = rays_o_flat,
             rays_d = viewdirs_flat,
@@ -112,13 +115,18 @@ class VolumnRenderer(nn.Module):
             pts = rays_o_flat[ray_indices] + viewdirs_flat[ray_indices] * t_mid.unsqueeze(-1)
             # query network
             rgb_chunk, density_chunk = self.net(pts.unsqueeze(1), viewdirs_flat[ray_indices])
-            rgb_chunk = torch.sigmoid(rgb_chunk)
+            # rgb_chunk: (num_points, 1, 3)
+            # density_chunk: (num_points, 1, 1)
+            rgb_chunk = torch.sigmoid(rgb_chunk.view(-1, 3))
             # calculate alpha
-            delta = (t_ends - t_starts).unsqueeze(-1)
-            alpha = 1.0 - torch.exp(-torch.relu(density_chunk) * delta)
-            return rgb_chunk, alpha.squeeze(-1)
+            delta = (t_ends - t_starts)
+            alpha = 1.0 - torch.exp(-torch.relu(density_chunk.view(-1)) * delta)
+            return rgb_chunk, alpha
 
         # call rendering function of nerfacc
+        # colors: (N_rays, 3)
+        # opacities: (N_rays, 1)
+        # depths: (N_rays, 1)
         colors, opacities, depths, extras = nerfacc.rendering(
             t_starts = t_starts,
             t_ends = t_ends,
