@@ -286,7 +286,7 @@ class Network(nn.Module):
             # a. get inputs of current chunk
             chunk_pts = pts_flat[i : i + self.chunk]
             chunk_viewdirs = viewdirs_expanded[i : i + self.chunk]
-            chunk_indices = indices[i : i + self.chunk]
+            chunk_indices = flat_indices[i : i + self.chunk]
 
             # b. concatenate and embed current chunk
             chunk_embedded_pts = self.embed_fn(chunk_pts)
