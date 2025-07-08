@@ -1,5 +1,5 @@
 task: "kilonerf_replication"
-gpus: [0] # set gpu device number
+gpus: [1] # set gpu device number
 exp_name: "kilonerf"
 scene: "lego"
 
@@ -10,7 +10,7 @@ dist_dataset_module: src.datasets.kilonerf.blender
 network_module: src.models.kilonerf.network
 renderer_module: src.models.kilonerf.renderer.volume_renderer
 loss_module: src.train.trainers.kilonerf
-evaluator_module: src.evaluators.nerf
+evaluator_module: src.evaluators.kilonerf
 
 # teacher model
 teacher_model_module: src.models.nerf.network
