@@ -117,11 +117,6 @@ class VolumnRenderer(nn.Module):
             rgb_alpha_fn = rgb_alpha_fn,
         )
 
-        ############## DEBUG ###############
-        print("shape of colors: ", colors.shape)
-        print("shape of opacities: ", opacities.shape)
-        print("shape of depths: ", depths.shape)
-
         # deal with background
         colors += (1.0 - opacities) * (1.0 if self.white_bkgd else 0.0)
 
@@ -146,22 +141,8 @@ class VolumnRenderer(nn.Module):
         """
         Load grid from disk
         """
-        loaded_obj = torch.load(self.grid_path, map_location = self.device)
-        print(f"--- DEBUG: Loaded object from {self.grid_path} ---")
-        print(f"Type of loaded object: {type(loaded_obj)}")
-        if isinstance(loaded_obj, torch.Tensor):
-            print(f"Initial shape of loaded tensor: {loaded_obj.shape}")
-            self.occ_grid = loaded_obj.squeeze(0)
-            print(f"Shape after squeeze(0): {self.occ_grid.shape}")
-        else:
-            # 如果加载的是字典或其他类型，这里会打印出来
-            print(f"Loaded object is not a tensor, content: {loaded_obj}")
-            # 根据实际情况处理，例如: self.occ_grid = loaded_obj['grid'].squeeze(0)
-            # 这里暂时先报错，以便我们知道发生了什么
-            raise TypeError("Loaded occupancy grid is not a tensor!")
-        print("--------------------------------------------------")
-
-        print(f"Occupancy grid loaded from {self.grid_path}. shape: ", self.occ_grid.shape)
+        occ_grid = torch.load(self.grid_path, map_location = self.device)
+        print(f"Occupancy grid loaded from {self.grid_path}.\n Shape of occ_grid: ", self.occ_grid.shape)
 
     @torch.no_grad()
     def _evaluate_grid(self, verbose: bool = False):
