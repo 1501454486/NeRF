@@ -279,18 +279,32 @@ class Network(nn.Module):
         #     model_output = self.batchify(fn, self.chunk)(kilonerf_input)
         #     outputs_flat[mask] = model_output
 
-        # 3. Process in parallel
-        embedded_pts = self.embed_fn(pts_flat)
-        embedded_dirs = self.embeddirs_fn(viewdirs_expanded)
-        kilonerf_input = torch.cat([embedded_pts, embedded_dirs], dim = -1)
+        num_total_pts = pts_flat.shape[0]
+        all_outputs_flat = []
 
-        # outputs_flat = self.model(kilonerf_input, flat_indices)
-        outputs_flat = self.batchify_batch(self.model, self.chunk)(kilonerf_input, flat_indices)
+        for i in range(0, num_total_pts, self.chunk):
+            # a. get inputs of current chunk
+            chunk_pts = pts_flat[i : i + self.chunk]
+            chunk_viewdirs = viewdirs_expanded[i : i + self.chunk]
+            chunk_indices = indices[i : i + self.chunk]
 
-        # 4. process outputs
+            # b. concatenate and embed current chunk
+            chunk_embedded_pts = self.embed_fn(chunk_pts)
+            chunk_embedded_dirs = self.embeddirs_fn(chunk_viewdirs)
+            chunk_kilonerf_input = torch.cat([chunk_embedded_pts, chunk_embedded_dirs], dim = -1)
+
+            # c. input current chunk into kilonerf model
+            chunk_output = self.model(chunk_kilonerf_input, chunk_indices)
+
+            # d. collect outputs
+            all_outputs_flat.append(chunk_output)
+
+        # 4. concatenate outputs
+        outputs_flat = torch.cat([all_outputs_flat], 0)
+
+        # 5. process outputs
         # reshape outputs back to original shape
         outputs = outputs_flat.view(N_rays, N_samples, self.model.output_ch)
-
         rgb = outputs[..., :3]
         sigma = outputs[..., 3:4]       # remain the last dim to be 1
         
@@ -337,25 +351,6 @@ class Network(nn.Module):
                 [fn(inputs[i : i + chunk]) for i in range(0, inputs.shape[0], chunk)], 0
             )
 
-        return ret
-
-        
-    def batchify_batch(self, fn, chunk):
-        """
-        Batchify function for BatchKiloNeRF, which can deal with multiple inputs.
-        """
-        if chunk is None:
-            return fn
-        
-        def ret(inputs, indices):
-            outputs = []
-            for i in range(0, inputs.shape[0], chunk):
-                chunk_outputs = fn(
-                    inputs[i : i + chunk],
-                    indices[i : i + chunk]
-                )
-                outputs.append(chunk_outputs)
-            return torch.cat(outputs, 0)
         return ret
 
 
