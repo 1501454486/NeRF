@@ -39,7 +39,6 @@ class VolumnRenderer(nn.Module):
         self.scene_aabb = torch.tensor(cfg.task_arg.aabb['min'] + cfg.task_arg.aabb['max'], dtype=torch.float32, device=self.device)
         self.register_buffer('aabb_min', torch.tensor(cfg.task_arg.aabb['min'], device = self.device))
         self.register_buffer('aabb_max', torch.tensor(cfg.task_arg.aabb['max'], device = self.device))
-        self.register_buffer('occ_grid_resolution_tensor', torch.tensor(self.occ_grid_resolution, dtype = torch.float32, device = self.device))
 
         # grid path
         res_str = f"{self.occ_grid_resolution[0]}_{self.occ_grid_resolution[1]}_{self.occ_grid_resolution[2]}"
@@ -185,7 +184,7 @@ class VolumnRenderer(nn.Module):
         self.occ_grid = torch.zeros(self.occ_grid_resolution, dtype = torch.bool, device = self.device)
 
         # calculate size of every grid from aabb and resolution
-        cell_size = (self.aabb_max - self.aabb_min) / self.occ_grid_resolution_tensor
+        cell_size = (self.aabb_max - self.aabb_min) / torch.tensor(self.occ_grid_resolution, dtype = torch.float32, device = self.device)
 
         # calculate central coordinates of every cell
         x = torch.linspace(self.aabb_min[0], self.aabb_max[0], self.occ_grid_resolution[0] + 1, device = self.device)[:-1]

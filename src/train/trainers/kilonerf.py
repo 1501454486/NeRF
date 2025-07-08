@@ -11,7 +11,7 @@ class NetworkWrapper(nn.Module):
         self.net = net
         self.renderer = VolumnRenderer(
             net,
-            cff.task_arg.white_bkgd,
+            cfg.task_arg.white_bkgd,
             cfg.sampler.occ_threshold,
             cfg.result_dir
         )
