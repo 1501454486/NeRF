@@ -29,7 +29,7 @@ class VolumnRenderer(nn.Module):
         super().__init__()
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         self.net = net
-        self.white_bkgd = white_bkwgd
+        self.white_bkgd = white_bkgd
         self.occ_threshold = occ_thred
         self.result_dir = result_dir
 
@@ -59,8 +59,6 @@ class VolumnRenderer(nn.Module):
 
         # load grid into estimator
         self.estimator.binaries = self.occ_grid.unsqueeze(0)
-        self.render_step_size = cfg.sampler.render_step_size
-        self.early_stop_eps = cfg.sampler.ert_threshold
 
 
     def forward(self, batch, is_training: bool = True):
@@ -93,8 +91,8 @@ class VolumnRenderer(nn.Module):
             rays_o = rays_o_flat,
             rays_d = viewdirs_flat,
             sigma_fn = sigma_fn,
-            render_step_size = self.render_step_size,
-            early_stop_eps = self.early_stop_eps,
+            render_step_size = cfg.sampler.render_step_size,
+            early_stop_eps = cfg.sampler.ert_threshold,
         )
 
         # define callback function
