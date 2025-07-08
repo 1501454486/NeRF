@@ -45,7 +45,7 @@ class NetworkWrapper(nn.Module):
         loss_stats, image_stats = {}, {}
 
         # if in distillation step and no need to val, cause val needs gt_rgb
-        if stage == 'distillation' and (epoch + 1) % cfg.eval_ep != 0:
+        if stage == 'distillation' and is_training:
             teacher_rgb = batch['teacher_rgb']
             teacher_alpha = batch['teacher_alpha']
             loss_color = nn.functional.mse_loss(teacher_rgb.view(-1, 3), student_rgb.view(-1, 3))
