@@ -9,7 +9,12 @@ class NetworkWrapper(nn.Module):
     def __init__(self, net, train_loader = None):
         super().__init__()
         self.net = net
-        self.renderer = VolumnRenderer(net)
+        self.renderer = VolumnRenderer(
+            net,
+            cff.task_arg.white_bkgd,
+            cfg.sampler.occ_threshold,
+            cfg.result_dir
+        )
 
         self.l2_reg = cfg.task_arg.get('l2_reg', 0.0)
         self.ep_dist = cfg.train.ep_dist

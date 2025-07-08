@@ -17,16 +17,22 @@ class VolumnRenderer(nn.Module):
         net: The net to represent this scene. It will be queried to generate rgb and sigma.
         white_bkgd: whether to use background or not.
         occ_thred: threshold of occupancy grid. Grids with sigma < occ_thred is False, which means no occupancy; True otherwise.
+        result_dir: To which grid result will be written to.
     """
-    def __init__(self, net):
+    def __init__(
+        self,
+        net,
+        white_bkgd,
+        occ_thred,
+        result_dir
+    ):
         super().__init__()
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-        # self.sampler = Sampler()
         self.net = net
-        self.white_bkgd = cfg.task_arg.white_bkgd
+        self.white_bkgd = white_bkwgd
+        self.occ_threshold = occ_thred
+        self.result_dir = result_dir
 
-        self.occ_threshold = cfg.sampler.occ_threshold
-        self.result_dir = cfg.result_dir
         grid_resolution = cfg.task_arg.grid_resolution
         occ_factor = cfg.sampler.occ_factor
         self.occ_grid_resolution = [grid * occ_factor for grid in grid_resolution] # e.g., [256, 256, 256]
@@ -63,31 +69,6 @@ class VolumnRenderer(nn.Module):
         batch_size, N_rays, _ = rays_o.shape
         rays_o_flat, viewdirs_flat = rays_o.view(-1, 3), viewdirs.view(-1, 3)
         num_total_rays = batch_size * N_rays
-
-        # ===================== DEBUG CODE START =====================
-        print("\n\n--- NERFACC DEBUG INFO ---")
-        # 检查 estimator 对象本身及其关键属性
-        print(f"Estimator object: {self.estimator}")
-        if hasattr(self.estimator, 'roi_aabb'):
-            print(f"ROI AABB shape: {self.estimator.roi_aabb.shape}, dtype: {self.estimator.roi_aabb.dtype}")
-            print(f"ROI AABB value: {self.estimator.roi_aabb}")
-        if hasattr(self.estimator, 'resolution'):
-            print(f"Resolution value: {self.estimator.resolution}, type: {type(self.estimator.resolution)}")
-        if hasattr(self.estimator, 'binaries'):
-            print(f"Binaries shape: {self.estimator.binaries.shape}, dtype: {self.estimator.binaries.dtype}")
-            print(f"Binaries num elements: {self.estimator.binaries.numel()}")
-
-        # 检查传入的光线数据
-        print(f"Rays_o_flat shape: {rays_o_flat.shape}, dtype: {rays_o_flat.dtype}")
-        print(f"Viewdirs_flat shape: {viewdirs_flat.shape}, dtype: {viewdirs_flat.dtype}")
-
-        # 检查张量是否在内存中连续，这对于一些CUDA操作很重要
-        print(f"Is rays_o_flat contiguous? {rays_o_flat.is_contiguous()}")
-        print(f"Is viewdirs_flat contiguous? {viewdirs_flat.is_contiguous()}")
-
-        print(f"Scene AABB value: {self.scene_aabb}")
-        print("--------------------------\n\n")
-        # ====================== DEBUG CODE END ======================
 
         def sigma_fn(
             t_starts: Tensor, t_ends:Tensor, ray_indices: Tensor
@@ -140,9 +121,14 @@ class VolumnRenderer(nn.Module):
             t_starts = t_starts,
             t_ends = t_ends,
             ray_indices = ray_indices,
-            n_rays = N_rays,
+            n_rays = batch_size * N_rays,
             rgb_alpha_fn = rgb_alpha_fn,
         )
+
+        ############## DEBUG ###############
+        print("shape of colors: ", colors.shape)
+        print("shape of opacities: ", opacities.shape)
+        print("shape of depths: ", depths.shape)
 
         # deal with background
         colors += (1.0 - opacities) * (1.0 if self.white_bkgd else 0.0)
