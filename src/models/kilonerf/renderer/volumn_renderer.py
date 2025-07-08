@@ -43,7 +43,8 @@ class VolumnRenderer(nn.Module):
             levels = 1
         ).to(self.device)
 
-        self.estimator.binaries = self.occ_grid.flatten()
+        # FIX
+        self.estimator.binaries = self.occ_grid.unsqueeze(0)
         self.render_step_size = cfg.sampler.render_step_size
         self.early_stop_eps = cfg.sampler.ert_threshold
 
