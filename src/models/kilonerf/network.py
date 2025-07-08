@@ -300,7 +300,7 @@ class Network(nn.Module):
             all_outputs_flat.append(chunk_output)
 
         # 4. concatenate outputs
-        outputs_flat = torch.cat([all_outputs_flat], 0)
+        outputs_flat = torch.cat(all_outputs_flat, 0)
 
         # 5. process outputs
         # reshape outputs back to original shape
