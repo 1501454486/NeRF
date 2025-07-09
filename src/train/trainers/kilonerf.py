@@ -2,14 +2,14 @@ import torch
 import torch.nn as nn
 
 from src.config import cfg
-from src.models.kilonerf.renderer.volumn_renderer import VolumnRenderer
+from src.models.kilonerf.renderer.volumn_renderer import Renderer
 
 
 class NetworkWrapper(nn.Module):
     def __init__(self, net, train_loader = None):
         super().__init__()
         self.net = net
-        self.renderer = VolumnRenderer(
+        self.renderer = Renderer(
             net,
             cfg.task_arg.white_bkgd,
             cfg.sampler.occ_threshold,

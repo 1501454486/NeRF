@@ -9,7 +9,7 @@ import os
 from tqdm import tqdm
 
 
-class VolumnRenderer(nn.Module):
+class Renderer(nn.Module):
     """
     Renderer for KiloNeRF.
 
