@@ -8,7 +8,7 @@ train_dataset_module: src.datasets.kilonerf.blender
 test_dataset_module: src.datasets.kilonerf.blender
 dist_dataset_module: src.datasets.kilonerf.blender
 network_module: src.models.kilonerf.network
-renderer_module: src.models.kilonerf.renderer.volume_renderer
+renderer_module: src.models.kilonerf.renderer.volumn_renderer
 loss_module: src.train.trainers.kilonerf
 evaluator_module: src.evaluators.kilonerf
 
