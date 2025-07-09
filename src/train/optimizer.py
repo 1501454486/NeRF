@@ -6,8 +6,13 @@ from tqdm import tqdm
 _optimizer_factory = {"adam": torch.optim.Adam, "radam": RAdam, "sgd": torch.optim.SGD}
 
 
-def make_optimizer(cfg, net):
-    lr = cfg.train.lr
+def make_optimizer(cfg, net, stage = 'distillation'):
+    if stage == 'fine-tuning':
+        # 如果是微调阶段，优先使用 ft_lr ，如果未定义则使用 lr
+        lr = cfg.train.get('ft_lr', cfg.train.lr)
+    else:
+        lr = cfg.train.lr
+
     weight_decay = cfg.train.weight_decay
     eps = cfg.train.eps
 

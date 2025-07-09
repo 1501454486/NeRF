@@ -84,7 +84,7 @@ def run_evaluate():
         print("fps: ", 1.0 / np.mean(net_time))
 
     if cfg.write_video:
-        from utils.video_utils import render_video_from_images
+        from src.utils.video_utils import render_video_from_images
         render_video_from_images(
             os.path.join(cfg.result_dir, "images"),
             os.path.join(cfg.result_dir, "videos"),

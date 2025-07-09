@@ -48,8 +48,8 @@ def train(cfg, network):
         )
 
     trainer = make_trainer(cfg, network, None)
-    optimizer = make_optimizer(cfg, network)
-    scheduler = make_lr_scheduler(cfg, optimizer)
+    optimizer = make_optimizer(cfg, network, stage = 'distillation')
+    scheduler = make_lr_scheduler(cfg, optimizer, stage = 'distillation')
     recorder = make_recorder(cfg)
     evaluator = make_evaluator(cfg)
 
@@ -64,7 +64,7 @@ def train(cfg, network):
     if begin_epoch == 0 and cfg.pretrain != "":
         load_pretrain(network, cfg.pretrain)
 
-    set_lr_scheduler(cfg, scheduler)
+    # set_lr_scheduler(cfg, scheduler)
 
     for epoch in range(begin_epoch, cfg.train.epoch):
         recorder.epoch = epoch
@@ -78,6 +78,10 @@ def train(cfg, network):
             if epoch == cfg.train.ep_dist:
                 print("\n" + "=" * 30)
                 print("Switching from Distillation to Fine-tuning")
+                print("Re-initializing optimizer and scheduler for [Fine-tuning Stage]...")
+                optimizer = make_optimizer(cfg, network, stage = 'fine-tuning')
+                scheduler = make_lr_scheduler(cfg, optimizer, stage = 'fine_tuning')
+                print(f"New LR for fine-tuning: {optimizer.param_groups[0]['lr']:.6f}")
                 print("\n" + "=" * 30)
             train_loader = ft_loader
 

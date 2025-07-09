@@ -6,8 +6,11 @@ from src.utils.optimizer.lr_scheduler import (
 )
 
 
-def make_lr_scheduler(cfg, optimizer):
-    cfg_scheduler = cfg.train.scheduler
+def make_lr_scheduler(cfg, optimizer, stage = 'distillation'):
+    if 'distillation' in cfg.train.scheduler:
+        cfg_scheduler = cfg.train.scheduler[stage]
+    else:
+        cfg_scheduler = cfg.train.scheduler
     if cfg_scheduler.type == "multi_step":
         scheduler = MultiStepLR(
             optimizer, milestones=cfg_scheduler.milestones, gamma=cfg_scheduler.gamma

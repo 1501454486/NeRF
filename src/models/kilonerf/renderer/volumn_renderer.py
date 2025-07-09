@@ -77,6 +77,8 @@ class Renderer(nn.Module):
             rays_o = rays_o_flat,
             rays_d = viewdirs_flat,
             sigma_fn = sigma_fn,
+            near_plane = cfg.sampler.near,
+            far_plane = cfg.sampler.far,
             render_step_size = cfg.sampler.render_step_size,
             early_stop_eps = cfg.sampler.ert_threshold,
         )
