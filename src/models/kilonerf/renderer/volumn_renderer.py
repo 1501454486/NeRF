@@ -19,19 +19,10 @@ class Renderer(nn.Module):
         occ_thred: threshold of occupancy grid. Grids with sigma < occ_thred is False, which means no occupancy; True otherwise.
         result_dir: To which grid result will be written to.
     """
-    def __init__(
-        self,
-        net,
-        white_bkgd,
-        occ_thred,
-        result_dir
-    ):
+    def __init__(self, net):
         super().__init__()
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         self.net = net
-        self.white_bkgd = white_bkgd
-        self.occ_threshold = occ_thred
-        self.result_dir = result_dir
 
         grid_resolution = cfg.task_arg.grid_resolution
         occ_factor = cfg.sampler.occ_factor
@@ -42,7 +33,7 @@ class Renderer(nn.Module):
 
         # grid path
         res_str = f"{self.occ_grid_resolution[0]}_{self.occ_grid_resolution[1]}_{self.occ_grid_resolution[2]}"
-        self.grid_path = os.path.join(self.result_dir, f'occ_grid_res{res_str}_thresh{self.occ_threshold}.pth')
+        self.grid_path = os.path.join(cfg.result_dir, f'occ_grid_res{res_str}_thresh{cfg.sampler.occ_threshold}.pth')
         self.occ_grid = None
         if os.path.exists(self.grid_path):
             self._load_grid()
@@ -118,7 +109,7 @@ class Renderer(nn.Module):
         )
 
         # deal with background
-        colors += (1.0 - opacities) * (1.0 if self.white_bkgd else 0.0)
+        colors += (1.0 - opacities) * (1.0 if cfg.task_arg.white_bkgd else 0.0)
 
         image = {
             'rgb_map': colors.view(batch_size, N_rays, 3),
@@ -222,7 +213,7 @@ class Renderer(nn.Module):
             chunk_densities = densities.view(-1, 27)
             
             # if any densities of a subgrid > threshold, we consider this grid to be occupied
-            occupied_mask = torch.any(chunk_densities > self.occ_threshold, dim = -1)
+            occupied_mask = torch.any(chunk_densities > cfg.sampler.occ_threshold, dim = -1)
 
             # write results back to grids
             # get current indexes of the original grids
