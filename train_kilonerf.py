@@ -150,10 +150,6 @@ def main():
 
     network = make_network(cfg, "kilonerf")
 
-    if torch.__version__[0] == '2':
-        print("PyTorch 2.x detected. Compiling the model...")
-        network = torch.compile(network)
-
     if args.test:
         test(cfg, network)
     else:
