@@ -140,6 +140,8 @@ train:
 
 test:
   batch_size: 1
+  # model to be tested
+  model_name: kilonerf
 
 eval:
   whole_img: True

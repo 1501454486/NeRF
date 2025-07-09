@@ -119,7 +119,7 @@ def main():
         torch.distributed.init_process_group(backend="nccl", init_method="env://")
         synchronize()
 
-    network = make_network(cfg)
+    network = make_network(cfg, "nerf")
     if args.test:
         test(cfg, network)
     else:
