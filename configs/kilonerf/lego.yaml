@@ -137,7 +137,7 @@ train:
       type: "exponential"
       gamma: 0.9
       decay_epochs: 100
-    fine-tuning:
+    fine_tuning:
       type: "exponential"
       gamma: 0.1
       decay_epochs: 500
