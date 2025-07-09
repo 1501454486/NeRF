@@ -70,7 +70,7 @@ def run_evaluate():
         with torch.no_grad():
             torch.cuda.synchronize()
             start_time = time.time()
-            output = renderer.render(batch, is_training=False)
+            output = renderer(batch, is_training=False)
             torch.cuda.synchronize()
             end_time = time.time()
         net_time.append(end_time - start_time)
