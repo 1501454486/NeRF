@@ -8,6 +8,7 @@ import nerfacc
 import os
 from tqdm import tqdm
 from src.models import make_network
+from src.utils.net_utils import load_network
 
 
 class Renderer(nn.Module):
