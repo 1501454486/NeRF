@@ -7,6 +7,7 @@ import time
 import nerfacc
 import os
 from tqdm import tqdm
+from src.models import make_network
 
 
 class Renderer(nn.Module):

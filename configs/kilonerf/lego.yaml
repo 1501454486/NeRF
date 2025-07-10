@@ -56,7 +56,7 @@ sampler:
   # an occupancy_factor of 16 results: occ_grid_resolution: [256, 256, 256]
   occ_factor: 16
   # occupancy threshold, a cell is marked occupied if any of the evaluated densities is above this threshold
-  occ_threshold: 10
+  occ_threshold: 2
   # Early Ray Termination threshold eps
   ert_threshold: 0.01
   # the maximum number of sampled points
