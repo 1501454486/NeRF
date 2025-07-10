@@ -60,6 +60,7 @@ def train(cfg, network):
         recorder,
         cfg.trained_model_dir,
         resume=cfg.resume,
+        restart_learning = cfg.train.restart_learning
     )
     if begin_epoch == 0 and cfg.pretrain != "":
         load_pretrain(network, cfg.pretrain)

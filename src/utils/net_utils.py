@@ -285,7 +285,7 @@ class GeoCrossEntropyLoss(nn.Module):
         return loss
 
 
-def load_model(net, optim, scheduler, recorder, model_dir, resume=True, epoch=-1):
+def load_model(net, optim, scheduler, recorder, model_dir, resume=True, epoch=-1, restart_learning=False):
     if not resume:
         os.system("rm -rf {}".format(model_dir))
 
@@ -307,7 +307,7 @@ def load_model(net, optim, scheduler, recorder, model_dir, resume=True, epoch=-1
     print("load model: {}".format(os.path.join(model_dir, "{}.pth".format(pth))))
     pretrained_model = torch.load(os.path.join(model_dir, "{}.pth".format(pth)), "cpu")
     net.load_state_dict(pretrained_model["net"])
-    if "optim" in pretrained_model:
+    if "optim" in pretrained_model and not restart_learning:
         optim.load_state_dict(pretrained_model["optim"])
         # for state in optim.state.values():
         #     for k, v in state.items():

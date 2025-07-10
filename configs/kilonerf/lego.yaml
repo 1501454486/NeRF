@@ -142,6 +142,7 @@ train:
       gamma: 0.1
       decay_epochs: 500
   num_workers: 12
+  restart_learning: True
 
 test:
   batch_size: 1
