@@ -90,7 +90,7 @@ def run_evaluate():
             os.path.join(cfg.result_dir, "videos"),
             fps=24
         )
-        print("Video saved to: ", os.path.join(cfg.result_dir, "videos"))
+        print("Video saved to: ", os.path.join(cfg.result_dir, "videos.mp4"))
 
 
 if __name__ == "__main__":
