@@ -63,7 +63,6 @@ class Trainer(object):
             self.network.renderer.estimator.update_every_n_steps(
                 step = self.global_step,
                 occ_eval_fn = occ_eval_fn,
-                occ_thre = cfg.sampler.occ_threshold
             )
 
             output, loss, loss_stats, image_stats = self.network(batch)
