@@ -57,7 +57,7 @@ class Trainer(object):
 
             def occ_eval_fn(x):
                 dummy_viewdirs = torch.zeros_like(x)
-                _, sigma = self.network(x, dummy_viewdirs)
+                _, sigma = self.network.net(x, dummy_viewdirs)
                 return sigma.squeeze()
 
             self.network.renderer.estimator.update_every_n_steps(
