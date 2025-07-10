@@ -115,7 +115,7 @@ test_dataset:
   data_root: "data/lego"
   split: "test"
   input_ratio: 1
-  cams: [0, -1,1]
+  cams: [0, -1, 50]
   H: 800
   W: 800
 
@@ -127,10 +127,11 @@ train:
   single_view: False
   batch_size: 4
   lr: 5e-4 # learning rate
+  ft_lr: 1e-4
   weight_decay: 0.
   ep_dist: 300      # 150k iters for distillation
-  ep_ft: 2000       # 1000k iters for fine-tuning
-  epoch: 2300
+  ep_ft: 2400       # 1000k iters for fine-tuning
+  epoch: 2700
   optim: 'adam'
   scheduler:
     distillation:
