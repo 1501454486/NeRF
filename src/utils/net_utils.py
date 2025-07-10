@@ -308,7 +308,8 @@ def load_model(net, optim, scheduler, recorder, model_dir, resume=True, epoch=-1
     pretrained_model = torch.load(os.path.join(model_dir, "{}.pth".format(pth)), "cpu")
     net.load_state_dict(pretrained_model["net"])
     if "optim" in pretrained_model:
-        optim.load_state_dict(pretrained_model["optim"])
+        if not restart_learning:
+            optim.load_state_dict(pretrained_model["optim"])
         # for state in optim.state.values():
         #     for k, v in state.items():
         #         if torch.is_tensor(v):
