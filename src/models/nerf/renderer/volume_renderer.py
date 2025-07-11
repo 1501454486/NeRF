@@ -72,7 +72,11 @@ class Renderer(nn.Module):
             t_origins = rays_o_flat[ray_indices]  # (n_samples, 3)
             t_dirs = viewdirs_flat[ray_indices]  # (n_samples, 3)
             positions = t_origins + t_dirs * (t_starts + t_ends)[:, None] / 2.0
-            sigmas = self.net(positions.unsqueeze(1), viewdirs_flat[ray_indices])[:, -1]
+
+            sigmas = torch.zeros(positions.shape[0], device = positions.device)
+            for i in range(0, positions.shape[0], self.chunk_size):
+                chunk_sigmas = self.net(positions[i : i + self.chunk_size], viewdirs_flat[i : i + self.chunk_size])[:, -1]
+                sigmas[i : i + self.chunk_size] = chunk_sigmas
             return torch.relu(sigmas)  # (n_samples,)
 
         # Perform sampling with ESS
@@ -93,7 +97,12 @@ class Renderer(nn.Module):
             # shape of pts: (N_samples, 3)
             pts = rays_o_flat[ray_indices] + viewdirs_flat[ray_indices] * t_mid.unsqueeze(-1)
             # query network
-            outputs = self.net(pts, viewdirs_flat[ray_indices])
+
+            outputs = torch.zeros(pts.shape[0], 4, device = pts.device)
+            for i in range(0, pts.shape[0], self.chunk_size):
+                chunk_pts = pts[i : i + self.chunk_size]
+                chunk_dirs = viewdirs_flat[ray_indices[i : i + self.chunk_size]]
+                outputs[i : i + self.chunk_size] = self.net(chunk_pts, chunk_viewdirs)
             # rgb_chunk: (num_points, 1, 3)
             # density_chunk: (num_points, 1, 1)
             rgb_chunk = torch.sigmoid(outputs[:, :-1])
