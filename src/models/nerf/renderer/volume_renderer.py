@@ -107,7 +107,7 @@ class Renderer(nn.Module):
                 chunk_pts = pts[i : i + self.chunk_size]
                 chunk_ray_indices = ray_indices[i : i + self.chunk_size]
                 chunk_dirs = viewdirs_flat[chunk_ray_indices]
-                outputs[i : i + self.chunk_size] = self.net(chunk_pts, chunk_viewdirs)
+                outputs[i : i + self.chunk_size] = self.net(chunk_pts, chunk_dirs)
             # rgb_chunk: (num_points, 1, 3)
             # density_chunk: (num_points, 1, 1)
             rgb_chunk = torch.sigmoid(outputs[:, :-1])
