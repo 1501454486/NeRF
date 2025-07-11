@@ -139,32 +139,47 @@ class Renderer(nn.Module):
         # return image
 
 
+    @torch.no_grad()
     def _build_occ_grid(self, occ_thre: float = 0.01):
         """
-        use a pretrained model to build occupancy grid.
+        【修正版本】
+        使用标准的 PyTorch 函数来生成网格坐标，以兼容所有 nerfacc 版本。
         """
-        def occ_eval_fn(x):
-            dummy_viewdirs = torch.zeros_like(x)
-            sigma = self.network.net(x, dummy_viewdirs)[:, -1]
-            return sigma
+        print("Baking occupancy grid with PyTorch standard functions...")
 
-        grid_coords = nerfacc.grid.generate_grid_coords(
-            self.scene_aabb, self.estimator.resolution
-        ).to(self.device)
+        # 步骤 1: 使用标准的 PyTorch 函数来生成网格坐标
+        # 从 estimator 的 aabbs 属性获取边界。aabbs 形状为 [1, 6]
+        min_bound = self.estimator.aabbs[0, :3]
+        max_bound = self.estimator.aabbs[0, 3:]
+        resolution = self.estimator.resolution
 
+        # 为 x, y, z 三个轴创建线性间隔点
+        x_coords = torch.linspace(min_bound[0], max_bound[0], resolution[0], device=self.device)
+        y_coords = torch.linspace(min_bound[1], max_bound[1], resolution[1], device=self.device)
+        z_coords = torch.linspace(min_bound[2], max_bound[2], resolution[2], device=self.device)
+        
+        # 使用 meshgrid 创建三维坐标网格
+        grid_x, grid_y, grid_z = torch.meshgrid(x_coords, y_coords, z_coords, indexing='ij')
+        
+        # 将坐标堆叠并展平为 (N, 3) 的形状
+        grid_coords = torch.stack([grid_x, grid_y, grid_z], dim=-1).view(-1, 3)
+
+        # 步骤 2: 标准的 PyTorch 推理流程，分块查询 self.net 获取密度 (此部分逻辑不变)
+        def occ_eval_fn(pts):
+            return self.net(pts)[:, -1]
+        
         sigmas = []
         from tqdm import tqdm
-
-        for i in tqdm(range(0, grid_coords.shape[0], self.chunk_size), desc = "Evaluating Occupancy"):
-            coords_chunk = grid_coords[i : i + self.chunk_size]
+        for i in tqdm(range(0, grid_coords.shape[0], self.chunk_size), desc="Baking Occupancy Grid"):
+            coords_chunk = grid_coords[i:i+self.chunk_size]
             sigmas_chunk = occ_eval_fn(coords_chunk)
             sigmas.append(sigmas_chunk)
-
         sigmas = torch.cat(sigmas)
 
-        self.estimator.binaries = (sigmas > occ_thre).view(
-            self.estimator.resolution
-        ).unsqueeze(0)
+        # 步骤 3: 直接设置 nerfacc.OccGridEstimator 的官方公开属性 .binaries (此部分逻辑不变)
+        binaries = (sigmas > occ_thre).view(self.estimator.resolution)
+        self.estimator.binaries = binaries.unsqueeze(0)
+
 
 
     def render_coarse(self, batch, is_training: bool = True):
