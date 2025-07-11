@@ -167,8 +167,8 @@ class Renderer(nn.Module):
         # 步骤 2: 标准的 PyTorch 推理流程，分块查询 self.net 获取密度 (此部分逻辑不变)
         def occ_eval_fn(x):
             dummy_viewdirs = torch.zeros_like(x)
-            _, sigma = self.net(x, dummy_viewdirs)
-            return sigma.squeeze()
+            sigma = self.net(x, dummy_viewdirs)[:, -1]
+            return sigma
         
         sigmas = []
         from tqdm import tqdm
