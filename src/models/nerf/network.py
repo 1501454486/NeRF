@@ -179,7 +179,10 @@ class Network(nn.Module):
         embedded = self.embed_fn(inputs_flat)
 
         if self.use_viewdirs:
-            input_dirs = viewdirs[:, None].expand(inputs.shape)
+            if inputs.ndim == 3:
+                input_dirs = viewdirs[:, None].expand(inputs.shape)
+            else:
+                input_dirs = viewdirs
             input_dirs_flat = torch.reshape(input_dirs, [-1, input_dirs.shape[-1]])
             embedded_dirs = self.embeddirs_fn(input_dirs_flat)
             embedded = torch.cat([embedded, embedded_dirs], -1)
