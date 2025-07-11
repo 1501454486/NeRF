@@ -28,6 +28,16 @@ task_arg:
   precrop_iters: 500
   precrop_frac: 0.5
 
+  aabb:
+    min: [-1.0, -1.0, -1.0]
+    max: [1.0, 1.0, 1.0]
+
+  grid_resolution: [16, 16, 16]
+  occ_factor: 16
+
+  near: 2
+  far: 6
+
 network:
   nerf:
     W: 256 # width of network

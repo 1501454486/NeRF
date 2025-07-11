@@ -1,11 +1,14 @@
 import numpy as np
 import torch
+import torch.nn as nn
+from torch import Tensor
 import os
+import nerfacc
 
 from src.config import cfg
 
 
-class Renderer:
+class Renderer(nn.Module):
     def __init__(self, net):
         """
         This function is responsible for defining the rendering parameters, including the number of samples, the step size, and the background color.
@@ -14,6 +17,7 @@ class Renderer:
 
         Write your codes here.
         """
+        super().__init__()
         self.net = net
         self.N_samples = cfg.task_arg.N_samples
         self.N_importance = cfg.task_arg.N_importance
@@ -21,8 +25,8 @@ class Renderer:
         self.white_bkgd = cfg.task_arg.white_bkgd
         self.perturb = cfg.task_arg.perturb
         self.raw_noise_std = cfg.task_arg.raw_noise_std
-        self.near = 2
-        self.far = 6
+        self.near = cfg.task_arg.near
+        self.far = cfg.task_arg.far
 
         self.coarse_samples = None
         self.fine_samples = None
@@ -30,7 +34,16 @@ class Renderer:
         
         self.chunk_size = cfg.task_arg.chunk_size if cfg.task_arg.chunk_size > 0 else 1024
 
-    def render(self, batch, is_training: bool = True):
+        self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        self.occ_grid_resolution = [grid * cfg.task_arg.occ_factor for grid in cfg.task_arg.grid_resolution] # e.g., [256, 256, 256]
+        self.scene_aabb = torch.tensor(cfg.task_arg.aabb['min'] + cfg.task_arg.aabb['max'], dtype=torch.float32, device=self.device)
+        self.estimator = nerfacc.OccGridEstimator(
+            roi_aabb = self.scene_aabb,
+            resolution = self.occ_grid_resolution,
+            levels = 1
+        ).to(self.device)
+
+    def forward(self, batch, is_training: bool = True):
         """
         This function is responsible for rendering the output of the model, which includes the RGB values and the depth values.
         1. 输入是从dataloader中获得的batch, 包括光线方向rays(1024, 3)和rgb(1024, 3)
@@ -42,17 +55,85 @@ class Renderer:
 
         Write your codes here.
         """
-        coarse_rgb_map, coarse_depth_map, w_i_coarse, _ = self.render_coarse(batch, is_training)
-        fine_rgb_map, fine_depth_map, fine_alpha_map = self.render_fine(batch, w_i_coarse, is_training)
 
-        image = {}
-        image['coarse_rgb_map'] = coarse_rgb_map
-        image['coarse_depth_map'] = coarse_depth_map
-        image['fine_rgb_map'] = fine_rgb_map
-        image['fine_depth_map'] = fine_depth_map
-        image['alpha_map'] = fine_alpha_map
+        rays_o, viewdirs = batch['xyz'], batch['viewdirs']
+        batch_size, N_rays, _ = rays_o.shape
+        rays_o_flat, viewdirs_flat = rays_o.view(-1, 3), viewdirs.view(-1, 3)
+        num_total_rays = batch_size * N_rays
 
+        def sigma_fn(
+            t_starts: Tensor, t_ends:Tensor, ray_indices: Tensor
+        ) -> Tensor:
+            """ Define how to query density for the estimator."""
+
+            t_origins = rays_o_flat[ray_indices]  # (n_samples, 3)
+            t_dirs = viewdirs_flat[ray_indices]  # (n_samples, 3)
+            positions = t_origins + t_dirs * (t_starts + t_ends)[:, None] / 2.0
+            sigmas = self.net(positions.unsqueeze(1), viewdirs_flat[ray_indices])[:, -1]
+            return torch.relu(sigmas)  # (n_samples,)
+
+        # Perform sampling with ESS
+        # ray_indices: (N_samples, )
+        # t_starts: (N_samples, )
+        # t_ends: (N_samples, )
+        ray_indices, t_starts, t_ends = self.estimator.sampling(
+            rays_o = rays_o_flat,
+            rays_d = viewdirs_flat,
+            sigma_fn = sigma_fn,
+            near_plane = self.near,
+            far_plane = self.far,
+        )
+
+        # define callback function
+        def rgb_alpha_fn(t_starts, t_ends, ray_indices):
+            t_mid = (t_starts + t_ends) / 2.0
+            # shape of pts: (N_samples, 3)
+            pts = rays_o_flat[ray_indices] + viewdirs_flat[ray_indices] * t_mid.unsqueeze(-1)
+            # query network
+            outputs = self.net(pts, viewdirs_flat[ray_indices])
+            # rgb_chunk: (num_points, 1, 3)
+            # density_chunk: (num_points, 1, 1)
+            rgb_chunk = torch.sigmoid(outputs[:, :-1])
+            # calculate alpha
+            delta = (t_ends - t_starts)
+            alpha = 1.0 - torch.exp(-torch.relu(outputs[:, -1]) * delta)
+            return rgb_chunk, alpha
+
+        # call rendering function of nerfacc
+        # colors: (N_rays, 3)
+        # opacities: (N_rays, 1)
+        # depths: (N_rays, 1)
+        colors, opacities, depths, _ = nerfacc.rendering(
+            t_starts = t_starts,
+            t_ends = t_ends,
+            ray_indices = ray_indices,
+            n_rays = batch_size * N_rays,
+            rgb_alpha_fn = rgb_alpha_fn,
+        )
+
+        # deal with background
+        colors += (1.0 - opacities) * (1.0 if cfg.task_arg.white_bkgd else 0.0)
+
+        image = {
+            'fine_rgb_map': colors.view(batch_size, N_rays, 3),
+            'fine_depth_map': depths.view(batch_size, N_rays, 1),
+            'alpha_map': opacities.view(batch_size, N_rays, 1)
+        }
         return image
+
+
+
+        # coarse_rgb_map, coarse_depth_map, w_i_coarse, _ = self.render_coarse(batch, is_training)
+        # fine_rgb_map, fine_depth_map, fine_alpha_map = self.render_fine(batch, w_i_coarse, is_training)
+
+        # image = {}
+        # image['coarse_rgb_map'] = coarse_rgb_map
+        # image['coarse_depth_map'] = coarse_depth_map
+        # image['fine_rgb_map'] = fine_rgb_map
+        # image['fine_depth_map'] = fine_depth_map
+        # image['alpha_map'] = fine_alpha_map
+
+        # return image
 
     def render_coarse(self, batch, is_training: bool = True):
         """
