@@ -90,7 +90,6 @@ class Renderer(nn.Module):
         ray_indices, t_starts, t_ends = self.estimator.sampling(
             rays_o = rays_o_flat,
             rays_d = viewdirs_flat,
-            sigma_fn = sigma_fn,
             near_plane = self.near,
             far_plane = self.far,
         )
