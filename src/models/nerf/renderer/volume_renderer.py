@@ -42,6 +42,9 @@ class Renderer(nn.Module):
             resolution = self.occ_grid_resolution,
             levels = 1
         ).to(self.device)
+        
+        print("Building occupancy grid...")
+        self._build_occ_grid()
 
     def forward(self, batch, is_training: bool = True):
         """
@@ -134,6 +137,35 @@ class Renderer(nn.Module):
         # image['alpha_map'] = fine_alpha_map
 
         # return image
+
+
+    def _build_occ_grid(self, occ_thre: float = 0.01):
+        """
+        use a pretrained model to build occupancy grid.
+        """
+        def occ_eval_fn(x):
+            dummy_viewdirs = torch.zeros_like(x)
+            sigma = self.network.net(x, dummy_viewdirs)[:, -1]
+            return sigma
+
+        grid_coords = nerfacc.grid.generate_grid_coords(
+            self.scene_aabb, self.estimator.resolution
+        ).to(self.device)
+
+        sigmas = []
+        from tqdm import tqdm
+
+        for i in tqdm(range(0, grid_coords.shape[0], self.chunk_size), desc = "Evaluating Occupancy"):
+            coords_chunk = grid_coords[i : i + self.chunk_size]
+            sigmas_chunk = occ_eval_fn(coords_chunk)
+            sigmas.append(sigmas_chunk)
+
+        sigmas = torch.cat(sigmas)
+
+        self.estimator.binaries = (sigmas > occ_thre).view(
+            self.estimator.resolution
+        ).unsqueeze(0)
+
 
     def render_coarse(self, batch, is_training: bool = True):
         """
