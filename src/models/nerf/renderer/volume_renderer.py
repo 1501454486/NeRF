@@ -153,7 +153,7 @@ class Renderer(nn.Module):
 
 
     @torch.no_grad()
-    def _build_occ_grid(self, occ_thre: float = 0.01):
+    def _build_occ_grid(self, occ_thre: float = 10):
         """
         【修正版本】
         使用标准的 PyTorch 函数来生成网格坐标，以兼容所有 nerfacc 版本。
