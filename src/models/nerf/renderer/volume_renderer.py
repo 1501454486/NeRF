@@ -75,7 +75,11 @@ class Renderer(nn.Module):
 
             sigmas = torch.zeros(positions.shape[0], device = positions.device)
             for i in range(0, positions.shape[0], self.chunk_size):
-                chunk_sigmas = self.net(positions[i : i + self.chunk_size], viewdirs_flat[i : i + self.chunk_size])[:, -1]
+                chunk_positions = positions[i : i + self.chunk_size]
+                chunk_ray_indices = ray_indices[i : i + self.chunk_size]
+                chunk_viewdirs = viewdirs_flat[chunk_ray_indices]
+
+                chunk_sigmas = self.net(chunk_positions, chunk_viewdirs)[:, -1]
                 sigmas[i : i + self.chunk_size] = chunk_sigmas
             return torch.relu(sigmas)  # (n_samples,)
 
@@ -101,7 +105,8 @@ class Renderer(nn.Module):
             outputs = torch.zeros(pts.shape[0], 4, device = pts.device)
             for i in range(0, pts.shape[0], self.chunk_size):
                 chunk_pts = pts[i : i + self.chunk_size]
-                chunk_dirs = viewdirs_flat[ray_indices[i : i + self.chunk_size]]
+                chunk_ray_indices = ray_indices[i : i + self.chunk_size]
+                chunk_dirs = viewdirs_flat[chunk_ray_indices]
                 outputs[i : i + self.chunk_size] = self.net(chunk_pts, chunk_viewdirs)
             # rgb_chunk: (num_points, 1, 3)
             # density_chunk: (num_points, 1, 1)
