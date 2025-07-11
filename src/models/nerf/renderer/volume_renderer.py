@@ -165,8 +165,10 @@ class Renderer(nn.Module):
         grid_coords = torch.stack([grid_x, grid_y, grid_z], dim=-1).view(-1, 3)
 
         # 步骤 2: 标准的 PyTorch 推理流程，分块查询 self.net 获取密度 (此部分逻辑不变)
-        def occ_eval_fn(pts):
-            return self.net(pts)[:, -1]
+        def occ_eval_fn(x):
+            dummy_viewdirs = torch.zeros_like(x)
+            _, sigma = self.network.net(x, dummy_viewdirs)
+            return sigma.squeeze()
         
         sigmas = []
         from tqdm import tqdm
