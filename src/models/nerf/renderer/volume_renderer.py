@@ -34,10 +34,6 @@ class Renderer(nn.Module):
         
         self.chunk_size = cfg.task_arg.chunk_size if cfg.task_arg.chunk_size > 0 else 1024
 
-
-        self.num_samples_coarse = cfg.task_arg.get('N_samples', 64)
-        self.num_samples_fine = cfg.task_arg.get('N_importance', 128)
-
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         self.occ_grid_resolution = [grid * cfg.task_arg.occ_factor for grid in cfg.task_arg.grid_resolution] # e.g., [256, 256, 256]
         self.scene_aabb = torch.tensor(cfg.task_arg.aabb['min'] + cfg.task_arg.aabb['max'], dtype=torch.float32, device=self.device)
@@ -68,57 +64,35 @@ class Renderer(nn.Module):
         rays_o_flat, viewdirs_flat = rays_o.view(-1, 3), viewdirs.view(-1, 3)
         num_total_rays = batch_size * N_rays
 
-        t_vals = torch.linspace(0.0, 1.0, steps=self.num_samples_coarse, device=self.device)
-        
-        # 2. 根据 near 和 far 平面将 t 值映射到深度 z 值
-        z_vals = self.near * (1.0 - t_vals) + self.far * t_vals
-        
-        # 3. 为每条光线扩展深度值
-        z_vals = z_vals.expand(N_rays, self.num_samples_coarse) # 形状: (N_rays, N_samples)
-        
-        # 4. （可选，但推荐）在训练时加入扰动以实现分层采样
-        if self.perturb > 0. and is_training:
-            # 获取每个采样区间的中间点
-            mids = 0.5 * (z_vals[..., 1:] + z_vals[..., :-1])
-            # 获取每个区间的上下边界
-            upper = torch.cat([mids, z_vals[..., -1:]], -1)
-            lower = torch.cat([z_vals[..., :1], mids], -1)
-            # 在每个区间内随机采样
-            t_rand = torch.rand(z_vals.shape, device=self.device)
-            z_vals = lower + (upper - lower) * t_rand
+        def sigma_fn(
+            t_starts: Tensor, t_ends:Tensor, ray_indices: Tensor
+        ) -> Tensor:
+            """ Define how to query density for the estimator."""
 
-        t_starts_coarse = z_vals
-        # 计算每个采样区间的结束点
-        # 注意：这里我们简单地用下一个区间的起点作为当前区间的终点
-        # 这是一个简化处理，在实践中足够有效
-        delta = (self.far - self.near) / self.num_samples_coarse
-        t_ends_coarse = t_starts_coarse + delta
+            t_origins = rays_o_flat[ray_indices]  # (n_samples, 3)
+            t_dirs = viewdirs_flat[ray_indices]  # (n_samples, 3)
+            positions = t_origins + t_dirs * (t_starts + t_ends)[:, None] / 2.0
 
-        # 2. 定义如何计算权重 (用于重要性采样)
-        def weight_fn_coarse(t_starts, t_ends, ray_indices):
-            positions = rays_o_flat[ray_indices] + viewdirs_flat[ray_indices] * ((t_starts + t_ends) / 2.0).unsqueeze(-1)
-            # 这里我们只需要密度，所以可以调用一个简化的网络版本（如果您的网络支持）
-            # 为简单起见，我们仍然调用完整网络
-            sigmas = torch.zeros_like(t_starts)
+            sigmas = torch.zeros(positions.shape[0], device = positions.device)
             for i in range(0, positions.shape[0], self.chunk_size):
-                chunk_pts = positions[i:i+self.chunk_size]
-                # 假设您的 coarse net 和 fine net 是同一个
-                sigmas[i:i+self.chunk_size] = self.net(chunk_pts)[:, -1]
-            
-            # 使用 nerfacc 工具函数从密度计算权重
-            weights = nerfacc.render_weight_from_density(t_starts, t_ends, sigmas, ray_indices=ray_indices, n_rays=N_rays*batch_size)
-            return weights
+                chunk_positions = positions[i : i + self.chunk_size]
+                chunk_ray_indices = ray_indices[i : i + self.chunk_size]
+                chunk_viewdirs = viewdirs_flat[chunk_ray_indices]
 
-        # 1. 根据粗略权重进行重要性采样
-        t_starts_fine, t_ends_fine = nerfacc.importance_sampling(
-            t_starts_coarse, t_ends_coarse, weights_coarse,
-            num_samples=self.num_samples_fine
-        )
+                chunk_sigmas = self.net(chunk_positions, chunk_viewdirs)[:, -1]
+                sigmas[i : i + self.chunk_size] = chunk_sigmas
+            return torch.relu(sigmas)  # (n_samples,)
 
-        # 2. 合并粗采样和精采样的点
-        t_starts, t_ends = nerfacc.inclusive_cat(
-            t_starts_coarse, t_ends_coarse,
-            t_starts_fine, t_ends_fine
+        # Perform sampling with ESS
+        # ray_indices: (N_samples, )
+        # t_starts: (N_samples, )
+        # t_ends: (N_samples, )
+        ray_indices, t_starts, t_ends = self.estimator.sampling(
+            rays_o = rays_o_flat,
+            rays_d = viewdirs_flat,
+            sigma_fn = sigma_fn,
+            near_plane = self.near,
+            far_plane = self.far,
         )
 
         # define callback function
@@ -149,7 +123,7 @@ class Renderer(nn.Module):
         colors, opacities, depths, _ = nerfacc.rendering(
             t_starts = t_starts,
             t_ends = t_ends,
-            ray_indices=torch.arange(N_rays*batch_size, device=self.device).repeat_interleave(t_starts.shape[1]),
+            ray_indices = ray_indices,
             n_rays = batch_size * N_rays,
             rgb_alpha_fn = rgb_alpha_fn,
         )
@@ -180,7 +154,7 @@ class Renderer(nn.Module):
 
 
     @torch.no_grad()
-    def _build_occ_grid(self, occ_thre: float = 10):
+    def _build_occ_grid(self, occ_thre: float = 0.01):
         """
         【修正版本】
         使用标准的 PyTorch 函数来生成网格坐标，以兼容所有 nerfacc 版本。
