@@ -68,17 +68,31 @@ class Renderer(nn.Module):
         rays_o_flat, viewdirs_flat = rays_o.view(-1, 3), viewdirs.view(-1, 3)
         num_total_rays = batch_size * N_rays
 
-        # Perform sampling with ESS
-        # ray_indices: (N_samples, )
-        # t_starts: (N_samples, )
-        # t_ends: (N_samples, )
-        t_starts_coarse, t_ends_coarse = nerfacc.prop.uniform_sampling(
-            num_samples=self.num_samples_coarse,
-            n_rays=N_rays * batch_size,
-            near_plane=self.near,
-            far_plane=self.far,
-            device=self.device
-        )
+        t_vals = torch.linspace(0.0, 1.0, steps=self.num_samples_coarse, device=self.device)
+        
+        # 2. 根据 near 和 far 平面将 t 值映射到深度 z 值
+        z_vals = self.near * (1.0 - t_vals) + self.far * t_vals
+        
+        # 3. 为每条光线扩展深度值
+        z_vals = z_vals.expand(n_rays, self.num_samples_coarse) # 形状: (n_rays, N_samples)
+        
+        # 4. （可选，但推荐）在训练时加入扰动以实现分层采样
+        if self.perturb > 0. and is_training:
+            # 获取每个采样区间的中间点
+            mids = 0.5 * (z_vals[..., 1:] + z_vals[..., :-1])
+            # 获取每个区间的上下边界
+            upper = torch.cat([mids, z_vals[..., -1:]], -1)
+            lower = torch.cat([z_vals[..., :1], mids], -1)
+            # 在每个区间内随机采样
+            t_rand = torch.rand(z_vals.shape, device=self.device)
+            z_vals = lower + (upper - lower) * t_rand
+
+        t_starts_coarse = z_vals
+        # 计算每个采样区间的结束点
+        # 注意：这里我们简单地用下一个区间的起点作为当前区间的终点
+        # 这是一个简化处理，在实践中足够有效
+        delta = (self.far - self.near) / self.num_samples_coarse
+        t_ends_coarse = t_starts_coarse + delta
 
         # 2. 定义如何计算权重 (用于重要性采样)
         def weight_fn_coarse(t_starts, t_ends, ray_indices):
