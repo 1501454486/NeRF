@@ -74,7 +74,7 @@ class Renderer(nn.Module):
         z_vals = self.near * (1.0 - t_vals) + self.far * t_vals
         
         # 3. 为每条光线扩展深度值
-        z_vals = z_vals.expand(n_rays, self.num_samples_coarse) # 形状: (n_rays, N_samples)
+        z_vals = z_vals.expand(N_rays, self.num_samples_coarse) # 形状: (N_rays, N_samples)
         
         # 4. （可选，但推荐）在训练时加入扰动以实现分层采样
         if self.perturb > 0. and is_training:
