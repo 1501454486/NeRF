@@ -179,7 +179,7 @@ class Renderer(nn.Module):
         sigmas = torch.cat(sigmas)
 
         # 步骤 3: 直接设置 nerfacc.OccGridEstimator 的官方公开属性 .binaries (此部分逻辑不变)
-        binaries = (sigmas > occ_thre).view(self.estimator.resolution)
+        binaries = (sigmas > occ_thre).view(self.estimator.resolution.tolist())
         self.estimator.binaries = binaries.unsqueeze(0)
 
 
